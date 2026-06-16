@@ -16,14 +16,19 @@ CONFIG_URL="${MMX_CONFIG_URL:-https://agent.minimaxi.com/v1/api/config/web/commo
 
 json="$(curl -fsSL --max-time 20 -A "Mozilla/5.0" "$CONFIG_URL" 2>/dev/null || true)"
 if [ -n "$json" ]; then
-  url="$(printf '%s\n' "$json" | python3 -c '
-import sys, json
+  # MMX_REGION selects which edition to package: "cn" (default, com.minimax.agent.cn,
+  # filecdn.minimax.chat, minimax-cn scheme) or "overseas" (file.cdn.minimax.io).
+  url="$(printf '%s\n' "$json" | MMX_REGION="${MMX_REGION:-cn}" python3 -c '
+import os, sys, json
 try:
     j = json.load(sys.stdin)
 except Exception:
     sys.exit(0)
 ac = (j.get("data") or {}).get("agent_config") or {}
-for k in ("overseasX64MacosDownloadUrl", "cnX64MacosDownloadUrl"):
+keys = (("cnX64MacosDownloadUrl", "overseasX64MacosDownloadUrl")
+        if os.environ.get("MMX_REGION", "cn") != "overseas"
+        else ("overseasX64MacosDownloadUrl", "cnX64MacosDownloadUrl"))
+for k in keys:
     v = ac.get(k)
     if v:
         print(v); break
