@@ -1,0 +1,23 @@
+name: keepalive
+
+# GitHub automatically disables scheduled workflows on repos with no activity
+# for 60 days. This workflow makes a tiny keepalive commit once a week so the
+# periodic version-discovery cron in build.yml keeps running.
+on:
+  schedule:
+    - cron: "13 6 * * 1" # weekly, Monday 06:13 UTC (off the round minute)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gautamkrishnar/keepalive-workflow@v2
+        with:
+          commit_message: "chore: keepalive (automated)"
+          committer_username: "github-actions[bot]"
+          committer_email: "41898282+github-actions[bot]@users.noreply.github.com"

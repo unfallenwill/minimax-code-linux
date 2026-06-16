@@ -1,0 +1,25 @@
+#!/bin/sh
+# MiniMax Code (unofficial Linux build) launcher.
+# Self-locating: works both from the local build dir and from /opt/minimax-code.
+# Copied verbatim into the install root by install.sh (no templating needed).
+set -e
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+APP_NAME="MiniMax Code"
+
+# The app resolves its payload and daemon via process.resourcesPath
+# (= <scriptDir>/resources), where install.sh reproduced the macOS layout, so no
+# path overrides are required.
+export ELECTRON_ENABLE_LOGGING="${ELECTRON_ENABLE_LOGGING:-1}"
+
+# chrome-sandbox: use it when it is setuid (installed package); otherwise fall
+# back to --no-sandbox so the app still launches unprivileged (local builds,
+# containers, or kernels that block setuid).
+SANDBOX_ARGS=""
+if [ -u "$SCRIPT_DIR/chrome-sandbox" ] 2>/dev/null; then
+  :
+else
+  SANDBOX_ARGS="--no-sandbox"
+fi
+
+exec "$SCRIPT_DIR/electron" $SANDBOX_ARGS --class="$APP_NAME" "$@"

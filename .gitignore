@@ -1,0 +1,18 @@
+# Build / packaging output
+build/
+dist/
+
+# Upstream artifacts (never commit)
+*.dmg
+*.dmg.metadata
+*.exe
+*.zip
+*.tar.gz
+
+# Node
+node_modules/
+package-lock.json
+
+# Caches / logs
+.cache/
+*.log

@@ -1,0 +1,155 @@
+name: package
+
+# Build .deb + .rpm for MiniMax Code from the upstream macOS DMG and publish
+# them to a GitHub Release tagged minimax-code-v<version>.
+#
+# Triggers:
+#   - workflow_dispatch: build one explicit version. Pass `dmg_url` to point at a
+#     fetchable DMG; if omitted, packaging/resolve-version.sh resolves it (works
+#     once MiniMax publishes a latest-mac.yml at their electron-updater URL).
+#   - schedule (every 6h): discover the latest upstream version; if it is not yet
+#     released here, dispatch a build. (workflow_dispatch is the one event the
+#     GITHUB_TOKEN may trigger recursively.)
+#
+# Note: as of writing, MiniMax has not published latest-mac.yml at
+# https://filecdn.minimax.chat/public/minimax-agent/release, so scheduled
+# discovery no-ops until they do; use workflow_dispatch + dmg_url in the meantime.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Upstream version, e.g. 3.0.43"
+        required: true
+        type: string
+      dmg_url:
+        description: "Direct DMG URL (optional; auto-resolved if omitted)"
+        required: false
+        type: string
+      arch:
+        description: "Architecture"
+        required: true
+        type: choice
+        default: x64
+        options: [x64, arm]
+  schedule:
+    - cron: "23 */6 * * *"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  discover:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Discover new upstream version and dispatch a build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          if ! out="$(./packaging/resolve-version.sh 2>/dev/null)"; then
+            echo "No resolvable upstream version yet (latest-mac.yml not published); skipping."
+            exit 0
+          fi
+          ver="$(printf '%s\n' "$out" | sed -n '1p')"
+          [ -n "${ver:-}" ] || exit 0
+          echo "Latest MiniMax Code: $ver"
+          if gh release view "minimax-code-v${ver}" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "minimax-code-v${ver} already released; nothing to do."
+          else
+            gh workflow run build.yml -R "${{ github.repository }}" -f version="${ver}" -f arch=x64
+          fi
+
+  build:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26' }
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq p7zip-full perl file python3
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve DMG URL
+        id: dmg
+        env:
+          INPUT_DMG_URL: ${{ inputs.dmg_url }}
+        run: |
+          if [ -n "$INPUT_DMG_URL" ]; then
+            echo "url=$INPUT_DMG_URL" >> "$GITHUB_OUTPUT"
+          else
+            out="$(./packaging/resolve-version.sh)"
+            url="$(printf '%s\n' "$out" | sed -n '2p')"
+            [ -n "$url" ] || { echo "Could not resolve DMG URL" >&2; exit 1; }
+            echo "url=$url" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build packages
+        env:
+          PRODUCT_VERSION: ${{ inputs.version }}
+          ARCH: ${{ inputs.arch }}
+          DMG_URL: ${{ steps.dmg.outputs.url }}
+        run: ./packaging/build.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ inputs.arch }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      VER: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="minimax-code-v${VER}"
+          {
+            echo "MiniMax Code ${VER} — unofficial Linux packages"
+            echo
+            echo "Repackaged from MiniMax's official macOS build. MiniMax Code is (c) MiniMax;"
+            echo "this project only rewraps the upstream binaries for Linux. See NOTICE.md."
+            echo
+            echo "## Install"
+            echo '```bash'
+            echo "sudo apt install ./minimax-code_${VER}_amd64.deb     # Debian/Ubuntu"
+            echo "sudo dnf install ./minimax-code-${VER}.x86_64.rpm    # Fedora/RHEL"
+            echo '```'
+            echo
+            echo "## Assets"
+            for f in dist/*.deb dist/*.rpm dist/checksums_*; do echo "- \`$(basename "$f")\`"; done
+          } > /tmp/notes.md
+
+          if gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release $TAG exists; uploading/clobbering assets."
+            gh release upload "$TAG" dist/*.deb dist/*.rpm dist/checksums_* \
+              -R "${{ github.repository }}" --clobber
+          else
+            gh release create "$TAG" dist/*.deb dist/*.rpm dist/checksums_* \
+              -R "${{ github.repository }}" \
+              --title "MiniMax Code ${VER} (unofficial)" \
+              --notes-file /tmp/notes.md
+          fi
