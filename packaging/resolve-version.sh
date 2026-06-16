@@ -1,19 +1,43 @@
 #!/usr/bin/env bash
-# Resolve the latest MiniMax Code version + the DMG download URL.
+# Resolve the latest MiniMax Code version + a fetchable macOS DMG URL.
 # Prints two lines:
 #   <version>      e.g. 3.0.43
-#   <dmg-url>      fetchable URL for CI to download the DMG bytes
+#   <dmg-url>      fetchable DMG URL
 #
-# Strategies (first hit wins):
-#   1. electron-updater manifest: <url>/latest-mac.yml  -> version + files[].url
-#      (authoritative once MiniMax publishes it)
-#   2. candidate stable DMG filenames at the manifest base, version parsed from
-#      the name
-#   3. (fallback) nothing resolvable -> exit 1; CI then uses a manual dmg_url.
+# The extracted app.asar payload is architecture-independent, so the x64 DMG is
+# used for both x64 and arm64 Linux builds (only the Linux Electron runtime and
+# the opencode-linux-<arch> binary differ per target arch).
+#
+# Strategy 1 (primary): MiniMax's web common_config exposes per-platform download
+# URLs with the version embedded in the filename. Anonymously fetchable, no login.
+# Strategy 2 (fallback): electron-updater latest-mac.yml at their release URL.
 set -euo pipefail
-MANIFEST="${MMX_MANIFEST_URL:-https://filecdn.minimax.chat/public/minimax-agent/release}"
+CONFIG_URL="${MMX_CONFIG_URL:-https://agent.minimaxi.com/v1/api/config/web/common_config}"
 
-# --- Strategy 1: latest-mac.yml ---
+json="$(curl -fsSL --max-time 20 -A "Mozilla/5.0" "$CONFIG_URL" 2>/dev/null || true)"
+if [ -n "$json" ]; then
+  url="$(printf '%s\n' "$json" | python3 -c '
+import sys, json
+try:
+    j = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+ac = (j.get("data") or {}).get("agent_config") or {}
+for k in ("overseasX64MacosDownloadUrl", "cnX64MacosDownloadUrl"):
+    v = ac.get(k)
+    if v:
+        print(v); break
+' 2>/dev/null)"
+  if [ -n "$url" ]; then
+    ver="$(printf '%s' "$url" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+    if [ -n "$ver" ]; then
+      printf '%s\n%s\n' "$ver" "$url"
+      exit 0
+    fi
+  fi
+fi
+
+MANIFEST="${MMX_MANIFEST_URL:-https://filecdn.minimax.chat/public/minimax-agent/release}"
 if mac="$(curl -fsSL --max-time 20 "$MANIFEST/latest-mac.yml" 2>/dev/null)" && [ -n "$mac" ]; then
   ver="$(printf '%s\n' "$mac" | awk '/^version:/{print $2; exit}')"
   rel="$(printf '%s\n' "$mac" | awk '/^[[:space:]]+-[[:space:]]+url:/{print $3; exit}')"
@@ -23,18 +47,5 @@ if mac="$(curl -fsSL --max-time 20 "$MANIFEST/latest-mac.yml" 2>/dev/null)" && [
   fi
 fi
 
-# --- Strategy 2: well-known DMG filenames ---
-for f in "MiniMax Code.dmg" "minimax-code.dmg"; do
-  url="$MANIFEST/$f"
-  code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 -I "$url" 2>/dev/null || true)"
-  if [ "$code" = 200 ] || [ "$code" = 302 ]; then
-    ver="$(curl -sIL --max-time 15 "$url" 2>/dev/null | awk -F'= ' 'tolower($1)~/content-disposition/{print $2}' \
-           | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-    [ -n "$ver" ] || ver="$(printf '%s' "$url" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-    if [ -n "$ver" ]; then printf '%s\n%s\n' "$ver" "$url"; exit 0; fi
-  fi
-done
-
-echo "resolve-version: could not resolve a MiniMax Code DMG URL from $MANIFEST" >&2
-echo "Trigger build.yml manually with an explicit dmg_url input." >&2
+echo "resolve-version: could not resolve MiniMax Code version/URL" >&2
 exit 1
