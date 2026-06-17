@@ -74,7 +74,7 @@ asar_extract_app "$CONTENTS" "$INSTALL_DIR/resources/app"
 rm -rf "$INSTALL_DIR/resources/app.asar.unpacked"
 
 info "==> Applying Linux adaptation patches"
-node "$SCRIPT_DIR/scripts/patch_linux.js" "$INSTALL_DIR/resources/app"
+node "$SCRIPT_DIR/scripts/patch_linux.js" "$INSTALL_DIR/resources/app" "$MMX_PKG_NAME"
 
 GUI_ROOT="$INSTALL_DIR/resources/app"
 DAEMON_ROOT="$INSTALL_DIR/resources/resources/daemon"

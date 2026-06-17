@@ -5,7 +5,7 @@
 set -e
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-APP_NAME="MiniMax Code"
+APP_NAME="minimax-code"
 
 # The app resolves its payload and daemon via process.resourcesPath
 # (= <scriptDir>/resources), where install.sh reproduced the macOS layout, so no

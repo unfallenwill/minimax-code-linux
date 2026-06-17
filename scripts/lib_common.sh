@@ -9,7 +9,7 @@ set -o pipefail
 : "${MMX_APP_ID:=com.minimax.agent.cn}"
 : "${MMX_PKG_NAME:=minimax-code}"
 : "${MMX_DISPLAY:=MiniMax Code}"
-: "${MMX_WMCLASS:=MiniMax Code}"
+: "${MMX_WMCLASS:=minimax-code}"
 : "${MMX_BIN:=minimax-code}"
 : "${MMX_INSTALL_PREFIX:=/opt/minimax-code}"     # in-package path used by nfpm templates
 : "${MMX_ELECTRON_FALLBACK:=38.3.0}"
