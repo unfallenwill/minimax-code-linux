@@ -59,4 +59,20 @@ patchFile("package.json", [
    `"name": "${pkgName}"`],
 ]);
 
+// 4) Tray context menu. Upstream avoids setContextMenu (it intercepts
+//    left-click on macOS) and instead binds `right-click` to popUpContextMenu.
+//    That breaks on Linux: under StatusNotifierItem (AppIndicator on GNOME,
+//    native on KDE) the shell renders the tray menu itself and never forwards
+//    right-click to the app, so with setContextMenu(null) no menu appears at
+//    all. This is a Linux-only package, so just register the menu via
+//    setContextMenu; left-click still fires 'click' (bring-to-front) below.
+patchFile("dist/main/modules/tray/index.js", [
+  ["tray: setContextMenu so the Linux shell renders the menu",
+   /\/\/[^\n]*\n(\s*)t\.setContextMenu\(null\);/,
+   "// Linux: the shell (SNI / AppIndicator on GNOME, native on KDE) renders the\n" +
+   "$1// tray menu itself and never forwards right-click to the app, so register it\n" +
+   "$1// via setContextMenu. Left-click still fires 'click' (bring-to-front) below.\n" +
+   "$1t.setContextMenu(createContextMenu());"],
+]);
+
 log(changed ? `done (${changed} transform(s))` : "no changes needed");
