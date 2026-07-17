@@ -84,6 +84,13 @@ native_swap_screenshots     "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH"
 native_install_better_sqlite3 "$GUI_ROOT" "$ELECTRON_VERSION" "$MMX_NPM_ARCH"
 native_strip_macos          "$GUI_ROOT/node_modules"
 native_stub_mac_permissions "$GUI_ROOT/node_modules"
+# Add the Linux-native platform packages that the DMG omits: @mariozechner/clipboard
+# and @vscode/ripgrep only ship darwin subpackages, and node-pty has no Linux
+# prebuilds at all in the upstream asar. Pull each from npm, pinned to whatever
+# version the upstream main package declares.
+native_install_mariozechner_clipboard "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH"
+native_install_vscode_ripgrep         "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH"
+native_install_node_pty_linux         "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH" "$ELECTRON_VERSION"
 
 if [ -d "$DAEMON_ROOT" ]; then
   info "==> Processing native modules (daemon)"

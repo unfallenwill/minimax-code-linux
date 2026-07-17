@@ -24,10 +24,19 @@ native_strip_macos() {
   rm -rf \
     "$nm"/node-screenshots-darwin-* \
     "$nm"/node-screenshots-win32-* \
+    "$nm"/@mariozechner/clipboard-darwin-* \
+    "$nm"/@mariozechner/clipboard-win32-* \
+    "$nm"/@vscode/ripgrep-darwin-* \
+    "$nm"/@vscode/ripgrep-win32-* \
     "$nm"/@nut-tree/node-mac-permissions \
     "$nm"/@nut-tree/libnut-darwin \
     "$nm"/@nut-tree/libnut-win32 \
     2>/dev/null || true
+  # node-pty ships prebuilds for every platform; we only want the linux ones.
+  if [ -d "$nm/node-pty/prebuilds" ]; then
+    find "$nm/node-pty/prebuilds" -mindepth 1 -maxdepth 1 \
+      ! -name 'linux-*' -exec rm -rf {} + 2>/dev/null || true
+  fi
 }
 
 # Replace @nut-tree/node-mac-permissions with a no-op shim so require() resolves.
@@ -143,5 +152,123 @@ native_install_better_sqlite3() {
   else
     warn "better-sqlite3 install failed (see $work/install.log); the app may fail to persist data"
   fi
+  rm -rf "$work"
+}
+
+# Install the Linux platform package for @mariozechner/clipboard. Upstream ships
+# only the darwin platform subpackage (clipboard-darwin-arm64 + darwin-universal)
+# in the asar, so require('@mariozechner/clipboard') fails to find a binary on
+# Linux. The Linux variant is optionalDependencies in the main package, so
+# `npm install` it into the GUI tree.
+# $1 = node_modules dir, $2 = npm arch (x64|arm64)
+native_install_mariozechner_clipboard() {
+  local nm="$1" arch="$2"
+  local main="$nm/@mariozechner/clipboard"
+  [ -d "$main" ] || { info "no @mariozechner/clipboard in $nm; skipping"; return 0; }
+  local ver
+  ver="$(node -e 'try{console.log(require(process.argv[1]+"/package.json").version)}catch(e){console.log("")}' "$main" 2>/dev/null || true)"
+  [ -n "$ver" ] || ver="0.3.9"
+  local libc="${MMX_LIBC:-gnu}"
+  local pkg="@mariozechner/clipboard-linux-${arch}-${libc}"
+  [ -d "$nm/$pkg" ] && { info "$pkg already present"; return 0; }
+  info "Installing $pkg@$ver ..."
+  local work; work="$(mktemp -d)"
+  local tgz
+  tgz="$( cd "$work" && npm pack "$pkg@$ver" 2>/dev/null | tail -1 || true )"
+  if [ -n "$tgz" ] && [ -s "$work/$tgz" ]; then
+    rm -rf "$nm/$pkg"; mkdir -p "$nm/$pkg"
+    tar -xzf "$work/$tgz" -C "$nm/$pkg" --strip-components=1
+    rm -f "$work/$tgz"
+    info "Installed $pkg"
+  else
+    warn "Could not fetch $pkg@$ver; clipboard integration may be unavailable"
+  fi
+  rm -rf "$work"
+}
+
+# Install the Linux platform package for @vscode/ripgrep. The DMG bundles only
+# @vscode/ripgrep-darwin-{x64,arm64}; the linux binary has to come from npm.
+# We pin to the same version that ships in the asar to keep any API surface in
+# sync (@vscode/ripgrep is a thin wrapper that just spawns the bin/rg binary).
+# $1 = node_modules dir, $2 = npm arch (x64|arm64)
+native_install_vscode_ripgrep() {
+  local nm="$1" arch="$2"
+  local main="$nm/@vscode/ripgrep"
+  [ -d "$main" ] || { info "no @vscode/ripgrep in $nm; skipping"; return 0; }
+  local ver
+  ver="$(node -e 'try{console.log(require(process.argv[1]+"/package.json").version)}catch(e){console.log("")}' "$main" 2>/dev/null || true)"
+  [ -n "$ver" ] || ver="1.18.0"
+  local pkg="@vscode/ripgrep-linux-${arch}"
+  [ -d "$nm/$pkg" ] && { info "$pkg already present"; return 0; }
+  info "Installing $pkg@$ver ..."
+  local work; work="$(mktemp -d)"
+  local tgz
+  tgz="$( cd "$work" && npm pack "$pkg@$ver" 2>/dev/null | tail -1 || true )"
+  if [ -n "$tgz" ] && [ -s "$work/$tgz" ]; then
+    rm -rf "$nm/$pkg"; mkdir -p "$nm/$pkg"
+    tar -xzf "$work/$tgz" -C "$nm/$pkg" --strip-components=1
+    rm -f "$work/$tgz"
+    info "Installed $pkg"
+  else
+    warn "Could not fetch $pkg@$ver; ripgrep-based search may be unavailable"
+  fi
+  rm -rf "$work"
+}
+
+# Drop the linux prebuilds for node-pty into the extracted tree. Upstream's
+# macOS DMG includes only darwin-arm64 / darwin-x64 / win32-* prebuilds (and
+# even those references are sometimes missing on disk); the asar header has no
+# linux entries at all. node-pty's JS loader picks the right prebuild by
+# process.platform + process.arch, so we only need to populate
+# prebuilds/linux-{x64,arm64}/ without touching the rest of node-pty.
+#
+# node-pty@1.1.0 does not ship linux prebuilds on npm. We build them from
+# source against the Electron headers:
+#   - pty.node via node-gyp (needs Electron headers, downloads them)
+#   - spawn-helper via g++ (plain POSIX, no Electron deps)
+# binding.gyp only registers spawn-helper under OS=="mac", but the Linux fork
+# path in pty.cc execvp()s it unconditionally — so we have to compile it
+# ourselves.
+# $1 = node_modules dir, $2 = npm arch (x64|arm64), $3 = electron version
+native_install_node_pty_linux() {
+  local nm="$1" arch="$2" electron_ver="$3"
+  local main="$nm/node-pty"
+  [ -d "$main" ] || { info "no node-pty in $nm; skipping"; return 0; }
+  local ver
+  ver="$(node -e 'try{console.log(require(process.argv[1]+"/package.json").version)}catch(e){console.log("")}' "$main" 2>/dev/null || true)"
+  [ -n "$ver" ] || ver="1.1.0"
+  local want="linux-${arch}"
+  local pty_target="$main/prebuilds/$want/pty.node"
+  local helper_target="$main/prebuilds/$want/spawn-helper"
+  if [ -f "$pty_target" ] && [ -x "$helper_target" ]; then
+    info "node-pty $want prebuilds already present"
+    return 0
+  fi
+  info "Building node-pty@$ver linux prebuilds ($want) for Electron $electron_ver ..."
+  require_cmd g++ make python3
+  local work; work="$(mktemp -d)"
+  local rc=0
+  ( cd "$work" && npm init -y >/dev/null 2>&1 \
+    && npm install --no-audit --no-fund --no-save "node-pty@$ver" "node-addon-api" >/dev/null 2>&1 \
+    && cd node_modules/node-pty \
+    && npx --yes node-gyp rebuild --target="$electron_ver" --arch="$arch" \
+         --dist-url=https://electronjs.org/headers --runtime=electron \
+    >"$work/build.log" 2>&1 ) || rc=$?
+  if [ $rc -ne 0 ] || [ ! -f "$work/node_modules/node-pty/build/Release/pty.node" ]; then
+    warn "node-pty pty.node build failed (see $work/build.log); PTY support will be broken"
+    rm -rf "$work"; return 0
+  fi
+  # spawn-helper: tiny standalone C++ binary (no Electron deps). node-pty's
+  # binding.gyp only builds it on macOS; we compile it here for Linux.
+  g++ -O2 -o "$work/spawn-helper" "$work/node_modules/node-pty/src/unix/spawn-helper.cc" \
+    >>"$work/build.log" 2>&1 || {
+      warn "spawn-helper compile failed (see $work/build.log); pty.fork() will fail"
+      rm -rf "$work"; return 0
+    }
+  mkdir -p "$main/prebuilds/$want"
+  cp -f "$work/node_modules/node-pty/build/Release/pty.node" "$pty_target"
+  cp -f "$work/spawn-helper" "$helper_target"
+  chmod 0755 "$helper_target"
+  info "node-pty $want prebuilds built (pty.node + spawn-helper)"
   rm -rf "$work"
 }
