@@ -32,15 +32,13 @@ require_cmd() {
 }
 
 # Map a friendly arch token to npm/electron/deb/rpm arch strings.
-# $1 = x64 | arm ; exports MMX_ELECTRON_ARCH MMX_NPM_ARCH MMX_DEB_ARCH MMX_RPM_ARCH
+# $1 = x64 ; exports MMX_ELECTRON_ARCH MMX_NPM_ARCH MMX_DEB_ARCH MMX_RPM_ARCH
 resolve_arch() {
   case "$1" in
     x64|amd64)
       MMX_ELECTRON_ARCH=x64 MMX_NPM_ARCH=x64 MMX_DEB_ARCH=amd64 MMX_RPM_ARCH=x86_64 ;;
-    arm|arm64|aarch64)
-      MMX_ELECTRON_ARCH=arm64 MMX_NPM_ARCH=arm64 MMX_DEB_ARCH=arm64 MMX_RPM_ARCH=aarch64 ;;
     *)
-      die "Unknown arch '$1' (expected x64 or arm)" ;;
+      die "Unknown arch '$1' (only x64 is supported)" ;;
   esac
   export MMX_ELECTRON_ARCH MMX_NPM_ARCH MMX_DEB_ARCH MMX_RPM_ARCH
 }

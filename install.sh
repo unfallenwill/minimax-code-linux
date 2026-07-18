@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build a runnable Linux MiniMax Code app from an official macOS DMG.
 #
-#   ./install.sh --dmg "MiniMax Code-3.0.43.dmg" --install-dir build/minimax-code --arch x64
+#   ./install.sh --dmg "MiniMax Code-3.0.43.dmg" --install-dir build/minimax-code
 #
 # Pipeline: extract DMG -> stage resources/ -> extract app.asar -> process native
 # addons (GUI + daemon) -> install matching Linux Electron -> write start.sh.
@@ -21,14 +21,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DMG=""
 INSTALL_DIR="$SCRIPT_DIR/build/minimax-code"
-ARCH="x64"
+ARCH="x64"   # internal default; only x64 is supported
 
 usage() {
   cat <<EOF
-Usage: $0 --dmg <path> [--install-dir <dir>] [--arch x64|arm]
+Usage: $0 --dmg <path> [--install-dir <dir>]
   --dmg <path>         macOS DMG to convert (or set MMX_UPSTREAM_DMG_URL)
   --install-dir <dir>  output dir (default: build/minimax-code)
-  --arch <x64|arm>     target arch (default: x64)
 EOF
 }
 
@@ -36,7 +35,6 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dmg)         DMG="$2"; shift 2 ;;
     --install-dir) INSTALL_DIR="$2"; shift 2 ;;
-    --arch)        ARCH="$2"; shift 2 ;;
     -h|--help)     usage; exit 0 ;;
     *) die "Unknown argument: $1 (try --help)" ;;
   esac

@@ -60,7 +60,7 @@ JS
 }
 
 # Install the Linux platform package for node-screenshots (napi-rs, ABI-stable).
-# $1 = node_modules dir, $2 = npm arch (x64|arm64)
+# $1 = node_modules dir, $2 = npm arch (x64)
 native_swap_screenshots() {
   local nm="$1" arch="$2"
   local main="$nm/node-screenshots"
@@ -91,7 +91,7 @@ native_swap_screenshots() {
 # packages (opencode-linux-x64, opencode-linux-arm64, ...-musl). The macOS DMG
 # bundles only the darwin build, which fails to spawn on Linux (EACCES/ENOEXEC)
 # — this is what breaks sending messages, since every agent runs `opencode serve`.
-# $1 = the resources/resources dir, $2 = npm arch (x64|arm64)
+# $1 = the resources/resources dir, $2 = npm arch (x64)
 native_install_opencode() {
   local res_dir="$1" arch="$2"
   local bin="$res_dir/opencode/opencode"
@@ -160,7 +160,7 @@ native_install_better_sqlite3() {
 # in the asar, so require('@mariozechner/clipboard') fails to find a binary on
 # Linux. The Linux variant is optionalDependencies in the main package, so
 # `npm install` it into the GUI tree.
-# $1 = node_modules dir, $2 = npm arch (x64|arm64)
+# $1 = node_modules dir, $2 = npm arch (x64)
 native_install_mariozechner_clipboard() {
   local nm="$1" arch="$2"
   local main="$nm/@mariozechner/clipboard"
@@ -190,7 +190,7 @@ native_install_mariozechner_clipboard() {
 # @vscode/ripgrep-darwin-{x64,arm64}; the linux binary has to come from npm.
 # We pin to the same version that ships in the asar to keep any API surface in
 # sync (@vscode/ripgrep is a thin wrapper that just spawns the bin/rg binary).
-# $1 = node_modules dir, $2 = npm arch (x64|arm64)
+# $1 = node_modules dir, $2 = npm arch (x64)
 native_install_vscode_ripgrep() {
   local nm="$1" arch="$2"
   local main="$nm/@vscode/ripgrep"
@@ -229,7 +229,7 @@ native_install_vscode_ripgrep() {
 # binding.gyp only registers spawn-helper under OS=="mac", but the Linux fork
 # path in pty.cc execvp()s it unconditionally — so we have to compile it
 # ourselves.
-# $1 = node_modules dir, $2 = npm arch (x64|arm64), $3 = electron version
+# $1 = node_modules dir, $2 = npm arch (x64), $3 = electron version
 native_install_node_pty_linux() {
   local nm="$1" arch="$2" electron_ver="$3"
   local main="$nm/node-pty"

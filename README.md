@@ -11,7 +11,7 @@ Official product: <https://agent.minimax.io>
 
 This repository produces **unofficial Linux packages** for
 [MiniMax Code](https://agent.minimax.io) — MiniMax's AI coding agent — for
-**x86-64** (and experimentally **arm64**) Linux, in `.deb` and `.rpm` format.
+**x86-64** Linux, in `.deb` and `.rpm` format.
 
 MiniMax Code ships only for macOS and Windows. Because it is an
 [Electron](https://www.electronjs.org/) application, the bulk of it
@@ -27,10 +27,10 @@ Download the files for your distribution and architecture from
 
 ```bash
 # Debian / Ubuntu / Mint / Pop!_OS
-sudo apt install ./minimax-code_3.0.43_amd64.deb     # or _arm64.deb
+sudo apt install ./minimax-code_3.0.43_amd64.deb
 
 # Fedora / RHEL / openSUSE
-sudo dnf install ./minimax-code-3.0.43.x86_64.rpm     # or .aarch64.rpm
+sudo dnf install ./minimax-code-3.0.43.x86_64.rpm
 ```
 
 Launch from your application menu, or run `minimax-code` in a terminal. Verify
@@ -79,7 +79,7 @@ Requirements: `curl`, `7z` (p7zip), `perl`, `node`/`npm` (for `asar` and
 PRODUCT_VERSION=3.0.43 ARCH=x64 DMG="MiniMax Code-3.0.43.dmg" ./packaging/build.sh
 ```
 
-`ARCH` is `x64` or `arm`. The DMG is obtained from MiniMax's official download.
+`ARCH` is `x64`. The DMG is obtained from MiniMax's official download.
 
 ## How it works (conversion pipeline)
 

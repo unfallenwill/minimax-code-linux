@@ -4,7 +4,7 @@
 # payload (resources/app, resources/resources/daemon).
 # shellcheck shell=bash
 
-# $1 = electron version, $2 = electron arch (x64|arm64), $3 = install root dir
+# $1 = electron version, $2 = electron arch (x64), $3 = install root dir
 electron_install() {
   local ver="$1" arch="$2" dest="$3"
   local asset="electron-v${ver}-linux-${arch}.zip"

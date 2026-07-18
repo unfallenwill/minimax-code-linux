@@ -14,10 +14,9 @@
   function pickAsset(assets, arch, distro) {
     // assets look like: minimax-code_3.0.43_amd64.deb / minimax-code-3.0.43.x86_64.rpm
     var ext = distro === "deb" ? ".deb" : ".rpm";
-    var archHints = distro === "deb"
-      ? { amd64: ["amd64", "x86_64", "x64"], arm64: ["arm64", "aarch64"] }
-      : { amd64: ["x86_64", "amd64", "x64"], arm64: ["aarch64", "arm64"] };
-    var hints = archHints[arch] || [];
+    var hints = distro === "deb"
+      ? ["amd64", "x86_64", "x64"]
+      : ["x86_64", "amd64", "x64"];
     for (var i = 0; i < assets.length; i++) {
       var n = assets[i].name.toLowerCase();
       if (n.indexOf(ext) === -1) continue;

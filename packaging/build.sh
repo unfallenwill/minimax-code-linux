@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Build .deb and .rpm for MiniMax Code (one arch) from a macOS DMG.
 #
-#   PRODUCT_VERSION=3.0.43 ARCH=x64 DMG="MiniMax Code-3.0.43.dmg" ./packaging/build.sh
+#   PRODUCT_VERSION=3.0.43 DMG="MiniMax Code-3.0.43.dmg" ./packaging/build.sh
 #
 # Env:
 #   PRODUCT_VERSION  upstream version (auto-detected from the DMG if unset)
-#   ARCH             x64 | arm  (default: x64)
 #   DMG              path to a local DMG
 #   DMG_URL          URL to download the DMG from (used if DMG is unset)
 set -Eeuo pipefail

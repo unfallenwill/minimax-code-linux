@@ -5,7 +5,7 @@
 #   <dmg-url>      fetchable DMG URL
 #
 # The extracted app.asar payload is architecture-independent, so the x64 DMG is
-# used for both x64 and arm64 Linux builds (only the Linux Electron runtime and
+# used for the x64 Linux build (only the Linux Electron runtime and
 # the opencode-linux-<arch> binary differ per target arch).
 #
 # Strategy 1 (primary): MiniMax's web common_config exposes per-platform download

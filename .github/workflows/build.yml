@@ -26,12 +26,6 @@ on:
         description: "Direct DMG URL (optional; auto-resolved if omitted)"
         required: false
         type: string
-      arch:
-        description: "Architecture"
-        required: true
-        type: choice
-        default: x64
-        options: [x64, arm]
   schedule:
     - cron: "23 */6 * * *"
 
@@ -60,7 +54,7 @@ jobs:
           if gh release view "minimax-code-v${ver}" -R "${{ github.repository }}" >/dev/null 2>&1; then
             echo "minimax-code-v${ver} already released; nothing to do."
           else
-            gh workflow run build.yml -R "${{ github.repository }}" -f version="${ver}" -f arch=x64
+            gh workflow run build.yml -R "${{ github.repository }}" -f version="${ver}"
           fi
 
   build:
@@ -97,14 +91,13 @@ jobs:
       - name: Build packages
         env:
           PRODUCT_VERSION: ${{ inputs.version }}
-          ARCH: ${{ inputs.arch }}
           DMG_URL: ${{ steps.dmg.outputs.url }}
         run: ./packaging/build.sh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: packages-${{ inputs.arch }}
+          name: packages
           path: dist/
           if-no-files-found: error
           retention-days: 14
