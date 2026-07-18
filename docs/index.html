@@ -12,31 +12,29 @@
   <main class="container">
 
     <header class="hero">
-      <div class="badges">
-        <a class="badge badge-project" href="https://github.com/unfallenwill/minimax-code-linux" target="_blank" rel="noopener">GitHub</a>
-        <span class="badge badge-upstream" id="version-badge" title="最新已打包版本">v—</span>
-      </div>
-      <h1>MiniMax Code <span class="accent">Linux 版</span></h1>
-      <p class="subtitle">
-        MiniMax Code 的非官方 <code>.deb</code> / <code>.rpm</code> 安装包，
-        每次上游发布都会自动构建。选择你的发行版，一行命令即可安装。
+      <p class="hero-eyebrow">非官方 Linux 构建版</p>
+      <h1>MiniMax Code<br/>为 Linux 而来</h1>
+      <p class="tagline">
+        从官方 macOS 版转换的 <code>.deb</code> / <code>.rpm</code> 安装包，
+        跟随上游自动构建。选发行版，一行命令装好。
       </p>
+      <div class="hero-badges">
+        <a class="hero-badge" href="https://github.com/unfallenwill/minimax-code-linux" target="_blank" rel="noopener">GitHub</a>
+        <a class="hero-badge" href="https://github.com/unfallenwill/minimax-code-linux/releases" target="_blank" rel="noopener">Releases</a>
+        <span class="hero-badge version" id="version-badge" title="最新已打包版本">v—</span>
+      </div>
     </header>
 
-    <section class="download-card" aria-label="下载">
+    <section class="download-area" aria-label="下载">
       <div class="version-line">
         <span class="version-label">最新版本</span>
         <span class="version-value" id="version-value">加载中…</span>
         <span class="version-date" id="version-date"></span>
       </div>
 
-      <div class="arch-toggle" role="tablist" aria-label="架构">
-        <button class="tab active" data-arch="amd64" role="tab" aria-selected="true">x86_64（amd64）</button>
-      </div>
-
       <div class="distro-toggle" role="tablist" aria-label="发行版">
-        <button class="tab active" data-distro="deb" role="tab" aria-selected="true">Debian / Ubuntu / Mint</button>
-        <button class="tab"        data-distro="rpm" role="tab" aria-selected="false">Fedora / RHEL / openSUSE</button>
+        <button class="tab active" data-distro="deb" role="tab" aria-selected="true">Debian / Ubuntu</button>
+        <button class="tab"        data-distro="rpm" role="tab" aria-selected="false">Fedora / RHEL</button>
       </div>
 
       <div class="download-buttons">
@@ -44,78 +42,85 @@
           <span class="btn-label" id="download-label">下载</span>
           <span class="btn-sub"   id="download-sub"></span>
         </a>
-        <a class="btn btn-ghost" id="download-checksums" href="#" target="_blank" rel="noopener">校验文件</a>
-        <a class="btn btn-ghost" id="download-all" href="https://github.com/unfallenwill/minimax-code-linux/releases/latest" target="_blank" rel="noopener">全部文件 →</a>
+        <a class="btn btn-secondary" id="download-checksums" href="#" target="_blank" rel="noopener">校验文件</a>
+        <a class="btn btn-secondary" id="download-all" href="https://github.com/unfallenwill/minimax-code-linux/releases/latest" target="_blank" rel="noopener">全部文件</a>
       </div>
 
       <div class="command-block">
         <div class="command-header">
-          <span class="command-title">或在终端中安装：</span>
+          <span class="command-title">或在终端中安装</span>
           <button class="copy-btn" id="copy-cmd" type="button" aria-label="复制命令">复制</button>
         </div>
         <pre><code id="install-cmd"></code></pre>
       </div>
 
-      <div class="arch-help">
-        不确定自己的架构？运行 <code>uname -m</code>，应显示 <code>x86_64</code>。
+      <p class="arch-help">
+        适用于 x86_64 架构。不确定？运行 <code>uname -m</code>，应显示 <code>x86_64</code>。
+      </p>
+    </section>
+
+    <section class="section" aria-label="快速上手">
+      <h2 class="section-title">三步开始</h2>
+      <div class="steps-grid">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>下载</h3>
+          <p>选择你的发行版，点击上方按钮下载对应的安装包。</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>安装</h3>
+          <p>用 <code>apt</code> 或 <code>dnf</code> 一行命令安装，命令会自动复制到剪贴板。</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>启动</h3>
+          <p>从应用菜单启动，或在终端运行 <code>minimax-code</code>。</p>
+        </div>
       </div>
     </section>
 
-    <section class="steps" aria-label="快速上手">
-      <h2>三步搞定</h2>
-      <ol>
-        <li>
-          <strong>下载</strong>：按上方按钮选择对应发行版和架构的安装包。
-        </li>
-        <li>
-          <strong>安装</strong>：使用 <code>apt</code> 或 <code>dnf</code> 安装（上方命令已为你准备好）。
-          安装时会自动为 <code>chrome-sandbox</code> 设置 setuid 位，这是 Linux 启动应用所必需的。
-        </li>
-        <li>
-          <strong>启动</strong>：从应用菜单启动，或在终端运行 <code>minimax-code</code>。
-        </li>
-      </ol>
-    </section>
-
-    <section class="help" id="help" aria-label="常见问题">
-      <h2>故障排查</h2>
-      <details>
-        <summary>应用无法启动，或提示 <code>chrome-sandbox</code> 错误</summary>
-        <p>
-          安装包会自动给内置的 <code>chrome-sandbox</code> 设置 setuid 位（<code>chmod 4755</code>）。
-          如果你手动解包了文件，请运行：
-        </p>
-        <pre><code>sudo chmod 4755 /opt/minimax-code/chrome-sandbox</code></pre>
-      </details>
-      <details>
-        <summary>GNOME 下没有托盘菜单</summary>
-        <p>请安装 GNOME Shell 扩展 <code>AppIndicator and KStatusNotifierItem Support</code>。</p>
-      </details>
-      <details>
-        <summary>Wayland 下任务栏图标显示为默认图标</summary>
-        <p>已通过 <code>package.json#name</code> 修复。如果仍出现，请升级到最新版本。</p>
-      </details>
-      <details>
-        <summary>如何升级？</summary>
-        <p>直接安装新版本安装包即可，包管理器会自动替换旧版本，无需先卸载。</p>
-      </details>
-      <details>
-        <summary>如何卸载？</summary>
-        <pre><code>sudo apt remove minimax-code   # Debian/Ubuntu
+    <section class="section help" id="help" aria-label="常见问题">
+      <h2 class="section-title">常见问题</h2>
+      <div class="help-list">
+        <details>
+          <summary>应用无法启动，或提示 chrome-sandbox 错误</summary>
+          <p>
+            安装包会自动给内置的 <code>chrome-sandbox</code> 设置 setuid 位（<code>chmod 4755</code>）。
+            如果你手动解包了文件，请运行：
+          </p>
+          <pre><code>sudo chmod 4755 /opt/minimax-code/chrome-sandbox</code></pre>
+        </details>
+        <details>
+          <summary>GNOME 下没有托盘菜单</summary>
+          <p>请安装 GNOME Shell 扩展 <code>AppIndicator and KStatusNotifierItem Support</code>。</p>
+        </details>
+        <details>
+          <summary>Wayland 下任务栏图标显示为默认图标</summary>
+          <p>已通过 <code>package.json#name</code> 修复。如果仍出现，请升级到最新版本。</p>
+        </details>
+        <details>
+          <summary>如何升级？</summary>
+          <p>直接安装新版本安装包即可，包管理器会自动替换旧版本，无需先卸载。</p>
+        </details>
+        <details>
+          <summary>如何卸载？</summary>
+          <pre><code>sudo apt remove minimax-code   # Debian/Ubuntu
 sudo dnf remove minimax-code   # Fedora/RHEL</code></pre>
-      </details>
+        </details>
+      </div>
     </section>
 
     <footer class="footer">
       <p>
-        <strong>非官方项目。</strong>本项目与 MiniMax 公司无关，也未获得其认可或赞助。
-        MiniMax Code 版权归 MiniMax 所有。本仓库的打包脚本以 MIT 协议开源。
+        非官方项目，与 MiniMax 公司无关，也未获得其认可或赞助。<br/>
+        MiniMax Code 版权归 MiniMax 所有，本仓库的打包脚本以 MIT 协议开源。
       </p>
-      <p class="footer-links">
-        <a href="https://github.com/unfallenwill/minimax-code-linux" target="_blank" rel="noopener">源代码</a> ·
-        <a href="https://github.com/unfallenwill/minimax-code-linux/issues" target="_blank" rel="noopener">问题反馈</a> ·
+      <div class="footer-links">
+        <a href="https://github.com/unfallenwill/minimax-code-linux" target="_blank" rel="noopener">源代码</a>
+        <a href="https://github.com/unfallenwill/minimax-code-linux/issues" target="_blank" rel="noopener">问题反馈</a>
         <a href="https://github.com/unfallenwill/minimax-code-linux/releases" target="_blank" rel="noopener">全部版本</a>
-      </p>
+      </div>
     </footer>
 
   </main>

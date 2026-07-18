@@ -7,11 +7,11 @@
   var API  = "https://api.github.com/repos/" + REPO + "/releases/latest";
   var FALLBACK = "https://github.com/" + REPO + "/releases/latest";
 
-  var state = { version: null, assets: [], date: null, arch: "amd64", distro: "deb" };
+  var state = { version: null, assets: [], date: null, distro: "deb" };
 
   function $(id) { return document.getElementById(id); }
 
-  function pickAsset(assets, arch, distro) {
+  function pickAsset(assets, distro) {
     // assets look like: minimax-code_3.0.43_amd64.deb / minimax-code-3.0.43.x86_64.rpm
     var ext = distro === "deb" ? ".deb" : ".rpm";
     var hints = distro === "deb"
@@ -27,11 +27,11 @@
     return null;
   }
 
-  function pickChecksums(assets, arch) {
+  function pickChecksums(assets) {
     for (var i = 0; i < assets.length; i++) {
       var n = assets[i].name.toLowerCase();
       if (n.indexOf("checksums") === -1) continue;
-      if (n.indexOf(arch) !== -1 || n.indexOf("amd64") !== -1) return assets[i];
+      if (n.indexOf("amd64") !== -1) return assets[i];
     }
     return null;
   }
@@ -55,12 +55,12 @@
   }
 
   function renderDownload() {
-    var asset = pickAsset(state.assets, state.arch, state.distro);
+    var asset = pickAsset(state.assets, state.distro);
     var main = $("download-main");
     var label = $("download-label");
     var sub = $("download-sub");
     var cmd = $("install-cmd");
-    var checksums = pickChecksums(state.assets, state.arch);
+    var checksums = pickChecksums(state.assets);
 
     if (asset) {
       main.href = asset.browser_download_url;
@@ -87,30 +87,21 @@
     }
   }
 
-  function setTab(group, value) {
-    var attr = group === "arch" ? "data-arch" : "data-distro";
-    var tabs = document.querySelectorAll("[" + attr + "]");
+  function setTab(value) {
+    var tabs = document.querySelectorAll("[data-distro]");
     for (var i = 0; i < tabs.length; i++) {
-      var on = tabs[i].getAttribute(attr) === value;
+      var on = tabs[i].getAttribute("data-distro") === value;
       tabs[i].classList.toggle("active", on);
       tabs[i].setAttribute("aria-selected", on ? "true" : "false");
     }
   }
 
   function bindTabs() {
-    var archBtns = document.querySelectorAll("[data-arch]");
     var distroBtns = document.querySelectorAll("[data-distro]");
-    for (var i = 0; i < archBtns.length; i++) {
-      archBtns[i].addEventListener("click", function (e) {
-        state.arch = e.currentTarget.getAttribute("data-arch");
-        setTab("arch", state.arch);
-        renderDownload();
-      });
-    }
     for (var j = 0; j < distroBtns.length; j++) {
       distroBtns[j].addEventListener("click", function (e) {
         state.distro = e.currentTarget.getAttribute("data-distro");
-        setTab("distro", state.distro);
+        setTab(state.distro);
         renderDownload();
       });
     }
