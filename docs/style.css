@@ -1,0 +1,261 @@
+:root {
+  --bg:           #0d1117;
+  --bg-card:     #161b22;
+  --bg-embed:    #010409;
+  --border:      #30363d;
+  --text:        #e6edf3;
+  --text-muted:  #8b949e;
+  --accent:      #3b82f6;
+  --accent-press:#2563eb;
+  --danger:      #f85149;
+  --ok:          #3fb950;
+  --radius:      12px;
+  --radius-sm:   8px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", Inter, Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 48px 20px 80px;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  font-family: var(--mono);
+  background: var(--bg-embed);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  color: var(--text);
+}
+
+/* Hero --------------------------------------------------------------------- */
+.hero { text-align: center; margin-bottom: 32px; }
+
+.badges { display: flex; justify-content: center; gap: 8px; margin-bottom: 16px; }
+.badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+}
+.badge-upstream { color: var(--ok); border-color: rgba(63,185,80,0.4); }
+.badge-project:hover { text-decoration: none; color: var(--text); }
+
+.hero h1 {
+  font-size: clamp(28px, 5vw, 42px);
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+.accent { color: var(--accent); }
+
+.subtitle {
+  color: var(--text-muted);
+  max-width: 640px;
+  margin: 0 auto;
+  font-size: 16px;
+}
+
+/* Download card ------------------------------------------------------------ */
+.download-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+  margin-bottom: 40px;
+}
+
+.version-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.version-label { color: var(--text-muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
+.version-value { font-size: 20px; font-weight: 600; font-family: var(--mono); }
+.version-date  { color: var(--text-muted); font-size: 13px; }
+
+/* Tabs --------------------------------------------------------------------- */
+.arch-toggle, .distro-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.distro-toggle { margin-bottom: 22px; }
+
+.tab {
+  appearance: none;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.tab:hover { color: var(--text); border-color: var(--text-muted); }
+.tab.active {
+  background: rgba(59,130,246,0.12);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Buttons ------------------------------------------------------------------ */
+.download-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.btn {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 18px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  flex: 1 1 auto;
+  min-width: 220px;
+}
+.btn-primary:hover { background: var(--accent-press); text-decoration: none; }
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+.btn-ghost:hover { border-color: var(--text-muted); text-decoration: none; }
+.btn-label { font-weight: 600; }
+.btn-sub   { font-size: 11px; opacity: 0.85; font-family: var(--mono); }
+
+/* Command block ------------------------------------------------------------ */
+.command-block {
+  background: var(--bg-embed);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+.command-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.command-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.copy-btn {
+  appearance: none;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
+.copy-btn.copied { color: var(--ok); border-color: var(--ok); }
+.command-block pre { margin: 0; overflow-x: auto; }
+.command-block code {
+  background: none;
+  padding: 0;
+  color: var(--text);
+  font-size: 13px;
+  white-space: pre;
+}
+
+.arch-help {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+}
+.arch-map { display: inline-flex; gap: 4px; align-items: center; }
+
+/* Steps -------------------------------------------------------------------- */
+.steps, .help { margin-bottom: 40px; }
+.steps h2, .help h2 {
+  font-size: 20px;
+  margin: 0 0 16px;
+  font-weight: 600;
+}
+.steps ol { margin: 0; padding-left: 20px; color: var(--text); }
+.steps li { margin-bottom: 10px; }
+.steps strong { color: var(--text); }
+
+/* Troubleshooting ---------------------------------------------------------- */
+.help details {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+.help summary {
+  cursor: pointer;
+  font-weight: 500;
+  list-style: none;
+  outline: none;
+}
+.help summary::-webkit-details-marker { display: none; }
+.help summary::before { content: "▸ "; color: var(--text-muted); transition: transform .15s; display: inline-block; }
+.help details[open] summary::before { transform: rotate(90deg); }
+.help p { color: var(--text-muted); margin: 10px 0 0; }
+.help pre { margin: 10px 0 0; }
+.help code { font-size: 13px; }
+
+/* Footer ------------------------------------------------------------------- */
+.footer {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.footer p { margin: 0 0 8px; }
+.footer-links a { margin: 0 4px; }
+
+/* Mobile ------------------------------------------------------------------- */
+@media (max-width: 600px) {
+  .container { padding: 28px 16px 60px; }
+  .download-card { padding: 20px; }
+  .btn-primary { min-width: 100%; }
+  .download-buttons { flex-direction: column; }
+  .btn { width: 100%; }
+}
