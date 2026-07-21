@@ -72,11 +72,11 @@ Requirements: `curl`, `7z` (p7zip), `perl`, `node`/`npm` (for `asar` and
 
 ```bash
 # Produce a runnable Linux app tree from a local DMG (into build/minimax-code/):
-./install.sh --dmg "MiniMax Code-3.0.43.dmg" --install-dir build/minimax-code --arch x64
+./install.sh --dmg "MiniMax Code-3.0.43.dmg" --install-dir build/minimax-code
 ./build/minimax-code/start.sh            # launch it
 
 # Produce .deb + .rpm from a local DMG (into dist/):
-PRODUCT_VERSION=3.0.43 ARCH=x64 DMG="MiniMax Code-3.0.43.dmg" ./packaging/build.sh
+PRODUCT_VERSION=3.0.43 DMG="MiniMax Code-3.0.43.dmg" ./packaging/build.sh
 ```
 
 `ARCH` is `x64`. The DMG is obtained from MiniMax's official download.

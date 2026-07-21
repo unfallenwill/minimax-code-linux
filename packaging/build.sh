@@ -39,7 +39,7 @@ mkdir -p "$DIST" "$BUILD/scripts"
 # ---- Build the runnable Linux app -------------------------------------------
 info "==> Building app (arch=$ARCH) from $DMG"
 rm -rf "$PAYLOAD"
-"$ROOT/install.sh" --dmg "$DMG" --install-dir "$PAYLOAD" --arch "$ARCH"
+"$ROOT/install.sh" --dmg "$DMG" --install-dir "$PAYLOAD"
 
 # ---- Version ----------------------------------------------------------------
 if [ -z "$PRODUCT_VERSION" ]; then
