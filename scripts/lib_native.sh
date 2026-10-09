@@ -126,6 +126,61 @@ native_install_opencode() {
   rm -rf "$work"
 }
 
+# Build the Linux session-transfer client from source.
+#
+# The DMG ships resources/resources/session-transfer/darwin-x64/ only: a Mach-O
+# binary that cannot execute on Linux, and upstream publishes no Linux build.
+# local-runtime-v2 looks for `session-transfer/<platform>-<arch>/<binary>` under
+# process.resourcesPath (resolveBundledSessionTransferClient), so without a
+# linux-x64 entry it simply deletes MAVIS_SESSION_TRANSFER_CLIENT and the
+# session-handoff transfer capability stays absent.
+#
+# native/session-transfer-client/ in this repo is a from-scratch Go
+# implementation of the same stdin/stdout NDJSON protocol and relay API. We
+# compile it for the target arch so x86_64 packaging works from any host.
+# $1 = resources/resources dir, $2 = npm arch (x64)
+native_build_session_transfer_client() {
+  local res_dir="$1" arch="$2"
+  # ROOT is exported by install.sh but not when this library is sourced
+  # directly, and the build runs under `set -u`.
+  local root="${ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+  local src="$root/native/session-transfer-client"
+  [ -d "$src" ] || { warn "session-transfer client sources missing at $src; skipping"; return 0; }
+  require_cmd go
+
+  local goos="linux"
+  local goarch
+  case "$arch" in
+    x64|amd64) goarch="amd64" ;;
+    *) warn "session-transfer client: unsupported arch '$arch'; skipping"; return 0 ;;
+  esac
+
+  local out_dir="$res_dir/session-transfer/linux-$arch"
+  local binary="$out_dir/mavis-session-transfer-client"
+  # A stale binary from a previous build must not be reused after a source change.
+  rm -f "$binary"
+  mkdir -p "$out_dir"
+
+  info "Building session-transfer client for linux-$goarch ..."
+  local work rc=0
+  work="$(mktemp -d)"
+  # Build from a copy so a failed compile never leaves a half-written tree and
+  # GOFLAGS from the caller's environment cannot redirect the build.
+  cp -a "$src/." "$work/"
+  ( cd "$work" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+      go build -trimpath -ldflags="-s -w" \
+      -o "$binary" . ) >"$work/build.log" 2>&1 || rc=$?
+  if [ $rc -ne 0 ] || [ ! -x "$binary" ]; then
+    warn "session-transfer client build failed (see $work/build.log); session handoff transfers will be unavailable"
+    rm -f "$binary"
+    rm -rf "$work"
+    return 0
+  fi
+  rm -rf "$work"
+  chmod 0755 "$binary"
+  info "session-transfer client built for linux-$goarch"
+}
+
 # Reinstall better-sqlite3 as a full package built for the Electron runtime.
 # The bundled copy is stripped (no source/binding.gyp) and its .node is darwin.
 # We install in an ISOLATED temp project so npm does not try to resolve the app's

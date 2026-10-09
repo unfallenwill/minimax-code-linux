@@ -13,6 +13,10 @@ dist/
 node_modules/
 package-lock.json
 
+# Go (session-transfer client; built into the payload by install.sh)
+native/session-transfer-client/session-transfer-client
+native/session-transfer-client/mavis-session-transfer-client
+
 # Caches / logs
 .cache/
 *.log
