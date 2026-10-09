@@ -65,6 +65,18 @@ rm -rf "$INSTALL_DIR"; mkdir -p "$INSTALL_DIR/resources"
 cp -a "$CONTENTS/Resources/." "$INSTALL_DIR/resources/"
 rm -f "$INSTALL_DIR/resources/app.asar"
 
+# 7z extracts macOS extended-attribute / code-signature sidecars as literal
+# files named "<file>:com.apple.provenance", "<file>:com.apple.cs.CodeDirectory",
+# etc. They are meaningless off macOS, and some subsystems actively reject a
+# resource directory that contains undeclared files -- mcode-tools' validator
+# (validateEmbeddedResourceFiles) requires the directory to contain exactly the
+# files its manifest lists, so these leftovers made the connector integration
+# fail with "mcode-tools embedded output must contain only declared resources".
+# Strip them everywhere we copied from the DMG.
+info "==> Stripping macOS metadata sidecars"
+find "$INSTALL_DIR/resources" -name '*:com.apple.*' -type f -delete 2>/dev/null || true
+find "$INSTALL_DIR/resources" -name '*:com.apple.*' -type l -delete 2>/dev/null || true
+
 info "==> Extracting app.asar -> resources/app"
 asar_extract_app "$CONTENTS" "$INSTALL_DIR/resources/app"
 # app.asar.unpacked was copied wholesale above; the merge into app/ already
@@ -73,6 +85,27 @@ rm -rf "$INSTALL_DIR/resources/app.asar.unpacked"
 
 info "==> Applying Linux adaptation patches"
 node "$SCRIPT_DIR/scripts/patch_linux.js" "$INSTALL_DIR/resources/app" "$MMX_PKG_NAME"
+
+info "==> Verifying bundled runtime resources"
+# Upstream moves these in/out between releases and gates their loading on
+# app.isPackaged (patched to true in patch_linux.js), so a missing directory is
+# a SILENT feature loss, not a build failure. Warn loudly instead.
+#   mcode-tools/   connector integration; without it startup reports
+#                  "mcode-tools development resource preparation failed"
+#   pptx-core/     WASM runtime for pptx rendering; without runtime.json the
+#                  protocol handler registers with a null runtime root
+for _dir in mcode-tools pptx-core; do
+  if [ -d "$INSTALL_DIR/resources/resources/$_dir" ]; then
+    info "  present: resources/$_dir"
+  else
+    warn "missing: resources/$_dir (upstream ships a different layout in this version?)"
+  fi
+done
+if [ -f "$INSTALL_DIR/resources/resources/pptx-core/runtime.json" ]; then
+  info "  present: resources/pptx-core/runtime.json"
+else
+  warn "missing: resources/pptx-core/runtime.json (pptx rendering will be disabled)"
+fi
 
 GUI_ROOT="$INSTALL_DIR/resources/app"
 DAEMON_ROOT="$INSTALL_DIR/resources/resources/daemon"
@@ -100,6 +133,15 @@ info "==> Replacing bundled agent binaries for Linux"
 # The macOS DMG bundles only the darwin opencode (the agent runtime). Without a
 # Linux build, daemon can't spawn agents -> sending messages silently fails.
 native_install_opencode "$INSTALL_DIR/resources/resources" "$MMX_NPM_ARCH"
+
+# session-transfer ships as a darwin-x64 Mach-O binary with no Linux equivalent
+# upstream; build our own so session handoff can transfer sessions on Linux.
+native_build_session_transfer_client "$INSTALL_DIR/resources/resources" "$MMX_NPM_ARCH"
+
+# The DMG ships only @trycua/cua-driver-darwin-*, but upstream also publishes a
+# Linux build of the same driver. Pull it from npm so the computer-use skill can
+# load its native library instead of missing it entirely.
+native_install_cua_driver "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH"
 
 info "==> Installing Linux Electron $ELECTRON_VERSION (linux-$MMX_ELECTRON_ARCH)"
 electron_install "$ELECTRON_VERSION" "$MMX_ELECTRON_ARCH" "$INSTALL_DIR"

@@ -126,6 +126,113 @@ native_install_opencode() {
   rm -rf "$work"
 }
 
+# Build the Linux session-transfer client from source.
+#
+# The DMG ships resources/resources/session-transfer/darwin-x64/ only: a Mach-O
+# binary that cannot execute on Linux, and upstream publishes no Linux build.
+# local-runtime-v2 looks for `session-transfer/<platform>-<arch>/<binary>` under
+# process.resourcesPath (resolveBundledSessionTransferClient), so without a
+# linux-x64 entry it simply deletes MAVIS_SESSION_TRANSFER_CLIENT and the
+# session-handoff transfer capability stays absent.
+#
+# native/session-transfer-client/ in this repo is a from-scratch Go
+# implementation of the same stdin/stdout NDJSON protocol and relay API. We
+# compile it for the target arch so x86_64 packaging works from any host.
+# $1 = resources/resources dir, $2 = npm arch (x64)
+native_build_session_transfer_client() {
+  local res_dir="$1" arch="$2"
+  # ROOT is exported by install.sh but not when this library is sourced
+  # directly, and the build runs under `set -u`.
+  local root="${ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+  local src="$root/native/session-transfer-client"
+  [ -d "$src" ] || { warn "session-transfer client sources missing at $src; skipping"; return 0; }
+  require_cmd go
+
+  local goos="linux"
+  local goarch
+  case "$arch" in
+    x64|amd64) goarch="amd64" ;;
+    *) warn "session-transfer client: unsupported arch '$arch'; skipping"; return 0 ;;
+  esac
+
+  local out_dir="$res_dir/session-transfer/linux-$arch"
+  local binary="$out_dir/mavis-session-transfer-client"
+  # A stale binary from a previous build must not be reused after a source change.
+  rm -f "$binary"
+  mkdir -p "$out_dir"
+
+  info "Building session-transfer client for linux-$goarch ..."
+  local work rc=0
+  work="$(mktemp -d)"
+  # Build from a copy so a failed compile never leaves a half-written tree and
+  # GOFLAGS from the caller's environment cannot redirect the build.
+  cp -a "$src/." "$work/"
+  ( cd "$work" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+      go build -trimpath -ldflags="-s -w" \
+      -o "$binary" . ) >"$work/build.log" 2>&1 || rc=$?
+  if [ $rc -ne 0 ] || [ ! -x "$binary" ]; then
+    warn "session-transfer client build failed (see $work/build.log); session handoff transfers will be unavailable"
+    rm -f "$binary"
+    rm -rf "$work"
+    return 0
+  fi
+  rm -rf "$work"
+  chmod 0755 "$binary"
+  info "session-transfer client built for linux-$goarch"
+}
+
+# Install the Linux Cua Driver native package used by the computer-use skill.
+#
+# The macOS DMG ships only @trycua/cua-driver-darwin-{x64,arm64}: npm prunes
+# optionalDependencies to the host platform, so the Linux build is absent even
+# though upstream PUBLISHES it. cua-driver's own optionalDependencies list all
+# six platforms (linux-x64-gnu / linux-arm64-gnu / linux-*-musl included), and
+# its resolveLibPath() already derives `linux-<arch>-<libc>` from
+# process.platform + glibc, so no code change is needed on the SDK side -- the
+# only missing piece is the native library itself.
+#
+# We pin the version to whatever the bundled darwin package declares, so the
+# SDK and the native lib can never drift apart.
+# $1 = node_modules dir, $2 = npm arch (x64)
+native_install_cua_driver() {
+  local nm="$1" arch="$2"
+  local sdk="$nm/@trycua/cua-driver"
+  [ -d "$sdk" ] || { info "no @trycua/cua-driver in $nm; skipping"; return 0; }
+
+  local ver
+  ver="$(node -e 'try{console.log(require(process.argv[1]+"/package.json").version)}catch(e){console.log("")}' "$sdk" 2>/dev/null || true)"
+  [ -n "$ver" ] || ver="0.22.1"
+
+  local libc="${MMX_LIBC:-gnu}"
+  local pkg="cua-driver-linux-${arch}-${libc}"
+  local dir="$nm/@trycua/cua-driver-linux-${arch}-${libc}"
+  if [ -f "$dir/libcua_driver_sdk.so" ] && [ -f "$dir/cua_driver_node_runtime.node" ]; then
+    info "$pkg already present"; return 0
+  fi
+
+  info "Installing @trycua/$pkg@$ver (computer-use native driver) ..."
+  require_cmd npm node
+  local work tgz rc=0
+  work="$(mktemp -d)"
+  tgz="$( cd "$work" && npm pack "@trycua/$pkg@$ver" 2>/dev/null | tail -1 || true )"
+  if [ -n "$tgz" ] && [ -s "$work/$tgz" ]; then
+    tar -xzf "$work/$tgz" -C "$work"
+    if [ -f "$work/package/libcua_driver_sdk.so" ] && [ -f "$work/package/cua_driver_node_runtime.node" ]; then
+      rm -rf "$dir"; mkdir -p "$dir"
+      cp -a "$work/package/." "$dir/"
+      chmod 0755 "$dir/libcua_driver_sdk.so" "$dir/cua_driver_node_runtime.node"
+      info "@trycua/$pkg installed"
+    else
+      warn "@trycua/$pkg tarball is missing the expected native files"
+    fi
+  else
+    rc=1
+    warn "Could not fetch @trycua/$pkg@$ver; computer-use will be unavailable"
+  fi
+  rm -rf "$work"
+  return 0
+}
+
 # Reinstall better-sqlite3 as a full package built for the Electron runtime.
 # The bundled copy is stripped (no source/binding.gyp) and its .node is darwin.
 # We install in an ISOLATED temp project so npm does not try to resolve the app's
