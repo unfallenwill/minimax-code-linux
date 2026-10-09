@@ -181,6 +181,58 @@ native_build_session_transfer_client() {
   info "session-transfer client built for linux-$goarch"
 }
 
+# Install the Linux Cua Driver native package used by the computer-use skill.
+#
+# The macOS DMG ships only @trycua/cua-driver-darwin-{x64,arm64}: npm prunes
+# optionalDependencies to the host platform, so the Linux build is absent even
+# though upstream PUBLISHES it. cua-driver's own optionalDependencies list all
+# six platforms (linux-x64-gnu / linux-arm64-gnu / linux-*-musl included), and
+# its resolveLibPath() already derives `linux-<arch>-<libc>` from
+# process.platform + glibc, so no code change is needed on the SDK side -- the
+# only missing piece is the native library itself.
+#
+# We pin the version to whatever the bundled darwin package declares, so the
+# SDK and the native lib can never drift apart.
+# $1 = node_modules dir, $2 = npm arch (x64)
+native_install_cua_driver() {
+  local nm="$1" arch="$2"
+  local sdk="$nm/@trycua/cua-driver"
+  [ -d "$sdk" ] || { info "no @trycua/cua-driver in $nm; skipping"; return 0; }
+
+  local ver
+  ver="$(node -e 'try{console.log(require(process.argv[1]+"/package.json").version)}catch(e){console.log("")}' "$sdk" 2>/dev/null || true)"
+  [ -n "$ver" ] || ver="0.22.1"
+
+  local libc="${MMX_LIBC:-gnu}"
+  local pkg="cua-driver-linux-${arch}-${libc}"
+  local dir="$nm/@trycua/cua-driver-linux-${arch}-${libc}"
+  if [ -f "$dir/libcua_driver_sdk.so" ] && [ -f "$dir/cua_driver_node_runtime.node" ]; then
+    info "$pkg already present"; return 0
+  fi
+
+  info "Installing @trycua/$pkg@$ver (computer-use native driver) ..."
+  require_cmd npm node
+  local work tgz rc=0
+  work="$(mktemp -d)"
+  tgz="$( cd "$work" && npm pack "@trycua/$pkg@$ver" 2>/dev/null | tail -1 || true )"
+  if [ -n "$tgz" ] && [ -s "$work/$tgz" ]; then
+    tar -xzf "$work/$tgz" -C "$work"
+    if [ -f "$work/package/libcua_driver_sdk.so" ] && [ -f "$work/package/cua_driver_node_runtime.node" ]; then
+      rm -rf "$dir"; mkdir -p "$dir"
+      cp -a "$work/package/." "$dir/"
+      chmod 0755 "$dir/libcua_driver_sdk.so" "$dir/cua_driver_node_runtime.node"
+      info "@trycua/$pkg installed"
+    else
+      warn "@trycua/$pkg tarball is missing the expected native files"
+    fi
+  else
+    rc=1
+    warn "Could not fetch @trycua/$pkg@$ver; computer-use will be unavailable"
+  fi
+  rm -rf "$work"
+  return 0
+}
+
 # Reinstall better-sqlite3 as a full package built for the Electron runtime.
 # The bundled copy is stripped (no source/binding.gyp) and its .node is darwin.
 # We install in an ISOLATED temp project so npm does not try to resolve the app's

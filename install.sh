@@ -138,6 +138,11 @@ native_install_opencode "$INSTALL_DIR/resources/resources" "$MMX_NPM_ARCH"
 # upstream; build our own so session handoff can transfer sessions on Linux.
 native_build_session_transfer_client "$INSTALL_DIR/resources/resources" "$MMX_NPM_ARCH"
 
+# The DMG ships only @trycua/cua-driver-darwin-*, but upstream also publishes a
+# Linux build of the same driver. Pull it from npm so the computer-use skill can
+# load its native library instead of missing it entirely.
+native_install_cua_driver "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH"
+
 info "==> Installing Linux Electron $ELECTRON_VERSION (linux-$MMX_ELECTRON_ARCH)"
 electron_install "$ELECTRON_VERSION" "$MMX_ELECTRON_ARCH" "$INSTALL_DIR"
 

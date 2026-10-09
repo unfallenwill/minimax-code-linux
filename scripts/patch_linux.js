@@ -155,4 +155,34 @@ patchFile("dist/main/modules/local-runtime/native-sqlite-env.js", [
      indent + "return Boolean(electronApp?.getAppPath?.().includes('app.asar'));"],
 ]);
 
+// 7) computer-use (Cua Driver) platform gates.
+//
+//    The macOS DMG ships only @trycua/cua-driver-darwin-*, but upstream PUBLISHES
+//    a Linux build (cua-driver-linux-x64-gnu) and its own resolveLibPath() already
+//    resolves linux-<arch>-<libc> -- so the driver itself is not the blocker; it is
+//    these allowlists. Four modules bail out on anything that is not darwin/win32,
+//    which silently disables the pointer, the click overlay, element_token
+//    coordinate targeting, and window handoff. Adding 'linux' to each allowlist
+//    re-enables them.
+//
+//    Deliberately NOT touched:
+//      - cua-launch-observation.js / cua-preview.js  : macOS-only preview capture.
+//      - cua-utility-server.js `platform !== 'darwin'` blocks at 490/512/678 :
+//        version/os-specific macOS 24 workarounds, not platform gating. Relaxing
+//        them would apply a macOS fix on Linux.
+//      - cua-utility-server.js modifier mapping : already correct on Linux
+//        (platformPrimaryModifier() returns 'ctrl').
+for (const rel of [
+  "dist/main/modules/local-runtime/computer-use/cua-pointer.js",
+  "dist/main/modules/local-runtime/computer-use/cua-overlay.js",
+  "dist/main/modules/local-runtime/computer-use/cua-pointer-target.js",
+  "dist/main/modules/local-runtime/computer-use/cua-window-handoff.js",
+]) {
+  patchFile(rel, [
+    ["allow linux in the computer-use platform allowlist",
+     /\['(darwin|win32)', '(win32|darwin)'\]\.includes\((process\.platform|this\.platform)\)/,
+     (_m, a, b, p) => `['${a}', '${b}', 'linux'].includes(${p})`],
+  ]);
+}
+
 log(changed ? `done (${changed} transform(s))` : "no changes needed");
