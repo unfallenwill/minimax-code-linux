@@ -5,17 +5,21 @@
 # written from scratch for MiniMax Code.
 # shellcheck shell=bash
 
-# Resolve the DMG to use. If $1 is an existing path, use it; otherwise download
-# from $MMX_UPSTREAM_DMG_URL. Echoes the local DMG path.
+# Resolve the DMG to use. If $1 is a non-empty path it must be an existing file
+# (a typo'd path is an error, never a silent fallback to the URL); otherwise
+# download from $MMX_UPSTREAM_DMG_URL into the cache. Echoes the local DMG path.
+# The download goes through fetch_to_cache: the cache file is replaced atomically
+# only after a complete download, so a failed download never corrupts a cached
+# DMG.
 dmg_resolve() {
   local dmg="${1:-}"
-  if [ -n "$dmg" ] && [ -f "$dmg" ]; then echo "$dmg"; return 0; fi
+  if [ -n "$dmg" ]; then
+    [ -f "$dmg" ] || die "DMG not found: $dmg"
+    echo "$dmg"; return 0
+  fi
   [ -n "$MMX_UPSTREAM_DMG_URL" ] || die "No DMG provided. Pass --dmg <path> or set MMX_UPSTREAM_DMG_URL."
-  mkdir -p "$MMX_CACHE_DIR"
   local dest="$MMX_CACHE_DIR/minimax-code.dmg"
-  info "Downloading DMG from $MMX_UPSTREAM_DMG_URL ..."
-  curl -fL --retry 3 --connect-timeout 30 -o "$dest" "$MMX_UPSTREAM_DMG_URL" \
-    || die "DMG download failed"
+  fetch_to_cache "$MMX_UPSTREAM_DMG_URL" "$dest" || die "DMG download failed"
   echo "$dest"
 }
 

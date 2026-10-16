@@ -1,0 +1,5 @@
+{
+  "name": "@electron/asar",
+  "version": "0.0.0-test-fixture",
+  "main": "index.js"
+}

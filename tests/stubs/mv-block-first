@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Offline test stub for mv (used by tests/run.sh).
+#
+# Fails exactly one caller-chosen operation — the `mv [-T] SRC ...` whose
+# source operand equals $MMX_TEST_BLOCK_MV_SRC (unset/empty never blocks) —
+# and delegates everything else to the real mv at $MMX_TEST_REAL_MV.
+src="${1:-}"
+[ "$src" = -T ] && src="${2:-}"
+if [ -n "${MMX_TEST_BLOCK_MV_SRC:-}" ] && [ "$src" = "$MMX_TEST_BLOCK_MV_SRC" ]; then
+  echo "stub-mv: blocked operation on $src" >&2
+  exit 1
+fi
+exec "${MMX_TEST_REAL_MV:?MMX_TEST_REAL_MV not set}" "$@"

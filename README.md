@@ -66,8 +66,8 @@ record of what has been packaged. A build can also be triggered manually with
 
 ## Build locally
 
-Requirements: `curl`, `7z` (p7zip), `perl`, `node`/`npm` (for `asar` and
-`@electron/rebuild`), and [`nfpm`](https://github.com/goreleaser/nfpm)
+Requirements: `curl`, `7z` (p7zip), `perl`, `python3`, `node`/`npm` (for
+`asar` and native-addon work), and [`nfpm`](https://github.com/goreleaser/nfpm)
 (`go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest`).
 
 ```bash
@@ -81,6 +81,29 @@ PRODUCT_VERSION=3.0.43 DMG="MiniMax Code-3.0.43.dmg" ./packaging/build.sh
 
 `ARCH` is `x64`. The DMG is obtained from MiniMax's official download.
 
+Both entry points are **non-destructive on failure**: arguments and the output
+directory are validated up front (dangerous targets such as `/`, system
+directories, `$HOME`, the repository itself or its tracked directories are
+refused), the build runs in a same-filesystem staging directory next to the
+target, and the previous output is replaced only after the build succeeds — a
+failed run restores an existing installation best-effort (the publish is two
+renames, not an atomic exchange). DMG and Electron downloads go through one
+helper that validates downloads (and cached Electron archives) before they
+enter the cache, so a failed or corrupt download never replaces a good cache
+entry.
+
+## Offline tests
+
+```bash
+./tests/run.sh
+```
+
+Regression tests for the destructive boundaries above. They run fully offline
+(no network, no DMG, no GUI): `7z`/`curl`/`unzip`/`mv` are stubbed and the DMG,
+`app.asar` and Electron payloads are fixtures, so the suite exercises success,
+failure and old-output preservation of the real scripts. See the header of
+[`tests/run.sh`](tests/run.sh) for the covered scenarios.
+
 ## How it works (conversion pipeline)
 
 1. **Extract** the macOS `.dmg` with `7z` (reads the UDIF/HFS+ format).
@@ -90,15 +113,20 @@ PRODUCT_VERSION=3.0.43 DMG="MiniMax Code-3.0.43.dmg" ./packaging/build.sh
    `app.asar.unpacked/` (the native addons that cannot live inside an asar).
    Copy `Contents/Resources/resources/daemon/` (the agent backend).
 4. **Strip macOS-only** pieces (Squirrel updater, macOS permissions addon,
-   darwin screenshot addon).
-5. **Swap / rebuild native addons** for Linux: rebuild `better-sqlite3` against
-   the Electron headers, swap in `node-screenshots-linux-*`, stub the
-   macOS-only permissions module, and verify the bundled `libnut` /
-   `fs-native-extensions` prebuilds match Electron's Node ABI.
-6. **Download** the official Linux Electron runtime of the detected version and
-   place the converted payload under `resources/app/`.
-7. **Wrap** the result with a self-locating `start.sh` launcher and package it
-   with `nfpm`.
+   darwin screenshot addon). Native-addon handling lives in three focused
+   modules: `scripts/lib_native_strip.sh` (offline strip/stub),
+   `scripts/lib_native_pkgs.sh` (Linux platform packages fetched from npm),
+   and `scripts/lib_native_build.sh` (addons compiled from source:
+   `better-sqlite3` against the Electron headers, `node-pty`'s `pty.node` +
+   `spawn-helper`, and the Go session-transfer client). `scripts/lib_native.sh`
+   remains as a compatibility entry that simply sources all three, so callers
+   can keep using the original single-include API.
+5. **Download** the official Linux Electron runtime of the detected version
+   (cached and CRC-validated) and place the converted payload under
+   `resources/app/`.
+6. **Wrap** the result with a self-locating `start.sh` launcher and package it
+   with `nfpm` (packages are staged and published only once both artifacts and
+   their checksums exist).
 
 See [the implementation plan](docs) (and the in-tree scripts) for details.
 

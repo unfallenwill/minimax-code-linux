@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Offline test stub for 7z (used by tests/run.sh).
+#
+# Ignores the archive path and fabricates a minimal "MiniMax Code.app" bundle
+# in the -oDIR target: both Info.plists (app version 9.9.9, Electron 38.3.0),
+# a placeholder app.asar (the real content is served by the fake @electron/asar
+# module in tests/fixtures/fake_asar/), an empty app.asar.unpacked, and a
+# pptx-core runtime.json to exercise the runtime-resource presence checks.
+set -u
+out=""
+for a in "$@"; do
+  case "$a" in -o*) out="${a#-o}" ;; esac
+done
+if [ -z "$out" ]; then
+  echo "stub-7z: no -oDIR argument seen" >&2
+  exit 2
+fi
+app="$out/MiniMax Code.app/Contents"
+mkdir -p "$app/Frameworks/Electron Framework.framework/Versions/A/Resources" \
+         "$app/Resources" \
+         "$app/Resources/app.asar.unpacked" \
+         "$app/Resources/resources/pptx-core"
+cat >"$app/Info.plist" <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleShortVersionString</key><string>9.9.9</string>
+  <key>CFBundleIdentifier</key><string>com.minimax.agent.cn</string>
+</dict></plist>
+XML
+cat >"$app/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist" <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleVersion</key><string>38.3.0</string>
+</dict></plist>
+XML
+printf 'not-a-real-asar-payload\n' >"$app/Resources/app.asar"
+echo '{}' >"$app/Resources/resources/pptx-core/runtime.json"
+exit 0

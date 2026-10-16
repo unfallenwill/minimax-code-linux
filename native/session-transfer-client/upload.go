@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -13,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -35,9 +33,6 @@ func runUpload(ctx context.Context, cfg *Configuration, control *transferControl
 		return err
 	}
 
-	// The bundle is streamed twice: once to hash it (the relay verifies
-	// integrity), once to upload. Caching multi-hundred-MB sessions to disk is
-	// wasteful, and local_path is already a stable on-disk snapshot.
 	begin, err := beginUpload(ctx, control, cfg)
 	if err != nil {
 		return err
@@ -46,19 +41,27 @@ func runUpload(ctx context.Context, cfg *Configuration, control *transferControl
 		return fmt.Errorf("multipart part size invalid: %d", begin.PartSize)
 	}
 
-	plan, err := planFileParts(snapshotRoot, begin.PartSize)
+	// Build the bundle ONCE and derive the part layout from the measured byte
+	// length of the finished stream. Planning the parts from a separate walk
+	// plus header arithmetic used to disagree with archive/tar whenever an
+	// entry needed PAX extended headers (long or non-ASCII paths), which
+	// silently corrupted every part boundary after that entry.
+	stream, err := newBundle(snapshotRoot)
 	if err != nil {
 		return err
 	}
+	defer stream.Close()
+
+	plan := planUploadParts(stream.total, begin.PartSize)
 	total := plan.totalSize
 	report(0, total)
 
-	completed, err := reconcileUploadCheckpoint(cfg, plan)
+	completed, err := reconcileUploadCheckpoint(cfg, begin, plan)
 	if err != nil {
 		return err
 	}
 
-	if err := uploadParts(ctx, control, cfg, begin, plan, completed, report); err != nil {
+	if err := uploadParts(ctx, control, cfg, begin, stream, plan, completed, report); err != nil {
 		return err
 	}
 
@@ -92,245 +95,44 @@ type filePartPlan struct {
 }
 
 type uploadPlan struct {
-	root      string
 	partSize  int64
 	parts     []filePartPlan
 	totalSize int64
 }
 
-// planFileParts walks the snapshot deterministically and lays the resulting tar
-// stream out into fixed-size parts. Byte offsets refer to the tar stream, so we
-// build the header/size arithmetic without materialising it.
-func planFileParts(root string, partSize int64) (*uploadPlan, error) {
-	entries, err := collectSnapshotFiles(root)
-	if err != nil {
-		return nil, err
-	}
-	plan := &uploadPlan{root: root, partSize: partSize}
-
+// planUploadParts tiles the tar stream [0,totalSize) into contiguous, evenly
+// bounded parts that cover it exactly once. It deliberately knows nothing
+// about tar internals: the caller must pass the measured size of the real
+// bundle (tarStreamReader.total), so part boundaries always match the bytes
+// that are actually uploaded.
+func planUploadParts(totalSize, partSize int64) *uploadPlan {
+	plan := &uploadPlan{partSize: partSize, totalSize: totalSize}
 	offset := int64(0)
-	// archive/tar writes exactly ONE 512-byte header block per entry, the
-	// payload, then padding up to the next 512 boundary, and closes the stream
-	// with two zero blocks. This must match archive/tar's real layout byte for
-	// byte -- newTarStreamReader is verified against a real tar in the tests.
-	const blockSize = 512
-	const headerBlock = blockSize
-
-	// appendRange lays [0,n) of logical stream space into parts, splitting
-	// whenever a part boundary is crossed so parts tile the stream exactly.
-	appendRange := func(n int64) {
-		for n > 0 {
-			withinPart := offset % partSize
-			take := min64(n, partSize-withinPart)
-			plan.parts = append(plan.parts, filePartPlan{
-				partNumber: len(plan.parts) + 1,
-				offset:     offset,
-				size:       take,
-			})
-			offset += take
-			n -= take
-		}
+	for offset < totalSize {
+		take := min64(partSize, totalSize-offset)
+		plan.parts = append(plan.parts, filePartPlan{
+			partNumber: len(plan.parts) + 1,
+			offset:     offset,
+			size:       take,
+		})
+		offset += take
 	}
-
-	for _, entry := range entries {
-		appendRange(headerBlock) // per-file header block
-		appendRange(entry.size)  // payload
-		if pad := entry.size % blockSize; pad != 0 {
-			appendRange(blockSize - pad) // padding to the next block
-		}
-	}
-	appendRange(2 * blockSize) // end-of-archive marker
-
-	plan.totalSize = offset
-	return plan, nil
+	return plan
 }
-
-func collectSnapshotFiles(root string) ([]snapshotEntry, error) {
-	var entries []snapshotEntry
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		// Never follow symlinks out of the snapshot root.
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		if pathEscapesRoot(rel) {
-			return fmt.Errorf("snapshot path escapes root: %s", rel)
-		}
-		entries = append(entries, snapshotEntry{absolute: path, relative: filepath.ToSlash(rel), size: info.Size()})
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("unable to resolve snapshot root: %w", err)
-	}
-	// Deterministic order keeps the tar (and therefore its hashes and part
-	// boundaries) reproducible across runs.
-	sort.Slice(entries, func(i, j int) bool { return entries[i].relative < entries[j].relative })
-	return entries, nil
-}
-
-type snapshotEntry struct {
-	absolute string
-	relative string
-	size     int64
-}
-
-func pathEscapesRoot(rel string) bool {
-	return rel == ".." || strings.HasPrefix(rel, "../")
-}
-
-// tarStreamReader streams the snapshot as an uncompressed tar, and is seekable
-// via ReadAt so parts can be read without buffering the whole bundle.
-// tarStreamReader exposes the snapshot as a single uncompressed tar stream that
-// can be read at arbitrary offsets.
-//
-// The bundle is materialised into an anonymous temp file rather than kept in
-// memory: session snapshots are routinely hundreds of megabytes, and a
-// seekable file is what lets each part be uploaded concurrently without holding
-// the whole tar in RAM. The file is unlinked immediately, so it disappears even
-// if the process is killed.
-type tarStreamReader struct {
-	entries []snapshotEntry
-	offsets []int64 // tar-stream offset of each entry's payload
-	starts  []int64 // tar-stream offset of each entry's header
-	total   int64
-	reader  io.ReaderAt
-	path    string
-}
-
-func newTarStreamReader(root string, entries []snapshotEntry, total int64) (*tarStreamReader, error) {
-	file, err := os.CreateTemp("", "mavis-session-transfer-*.tar")
-	if err != nil {
-		return nil, fmt.Errorf("unable to open multipart source: %w", err)
-	}
-	path := file.Name()
-	// 0600: the bundle can contain sensitive session content.
-	if err := file.Chmod(0o600); err != nil {
-		file.Close()
-		os.Remove(path)
-		return nil, fmt.Errorf("unable to secure multipart source: %w", err)
-	}
-
-	writer := tar.NewWriter(file)
-	// tar.Writer exposes no position, so track it ourselves. archive/tar writes
-	// exactly ONE 512-byte header block per entry (FormatPAX folds any extended
-	// header into that block), then the payload padded to the next 512 boundary,
-	// and closes with two zero blocks. planFileParts mirrors this arithmetic, so
-	// the two must stay in lockstep or the bundle would not be a valid tar.
-	const headerBlock = 512
-	tracker := &countingWriter{w: writer}
-
-	starts := make([]int64, 0, len(entries))
-	offsets := make([]int64, 0, len(entries))
-	for _, entry := range entries {
-		starts = append(starts, tracker.n)
-		offsets = append(offsets, tracker.n+headerBlock)
-		if err := writeTarHeader(writer, entry); err != nil {
-			file.Close()
-			os.Remove(path)
-			return nil, fmt.Errorf("unable to prepare bundle directory: %w", err)
-		}
-		source, err := os.Open(entry.absolute)
-		if err != nil {
-			file.Close()
-			os.Remove(path)
-			return nil, fmt.Errorf("unable to open snapshot file: %w", err)
-		}
-		copied, err := io.Copy(writer, source)
-		source.Close()
-		if err != nil {
-			file.Close()
-			os.Remove(path)
-			return nil, fmt.Errorf("unable to hash multipart source: %w", err)
-		}
-		if copied != entry.size {
-			file.Close()
-			os.Remove(path)
-			return nil, fmt.Errorf("snapshot changed while bundling: %s", entry.relative)
-		}
-	}
-	if err := writer.Close(); err != nil {
-		file.Close()
-		os.Remove(path)
-		return nil, fmt.Errorf("unable to close bundle: %w", err)
-	}
-	// Flush before any part is read back through ReadAt.
-	if err := file.Sync(); err != nil {
-		file.Close()
-		os.Remove(path)
-		return nil, fmt.Errorf("unable to close bundle: %w", err)
-	}
-
-	return &tarStreamReader{
-		entries: entries,
-		starts:  starts,
-		offsets: offsets,
-		total:   tracker.n,
-		reader:  file,
-		path:    path,
-	}, nil
-}
-
-// countingWriter tracks the number of bytes written through it.
-type countingWriter struct {
-	w io.Writer
-	n int64
-}
-
-func (c *countingWriter) Write(p []byte) (int, error) {
-	n, err := c.w.Write(p)
-	c.n += int64(n)
-	return n, err
-}
-
-func (t *tarStreamReader) Close() error {
-	if t.path != "" {
-		_ = os.Remove(t.path)
-	}
-	if c, ok := t.reader.(io.Closer); ok {
-		return c.Close()
-	}
-	return nil
-}
-
-func (t *tarStreamReader) ReadAt(p []byte, off int64) (int, error) { return t.reader.ReadAt(p, off) }
 
 // uploadParts walks the plan, asks the relay to sign the parts we still need,
-// and PUTs them concurrently.
+// and PUTs them concurrently. The stream must be the same bundle whose measured
+// size produced the plan; parts are read from it at their planned offsets.
 func uploadParts(
 	ctx context.Context,
 	control *transferControlClient,
 	cfg *Configuration,
 	begin *objectTransferBeginResponse,
+	stream *tarStreamReader,
 	plan *uploadPlan,
 	completed map[int]string,
 	report uploadProgress,
 ) error {
-	entries, err := collectSnapshotFiles(plan.root)
-	if err != nil {
-		return err
-	}
-	stream, err := newTarStreamReader(plan.root, entries, plan.totalSize)
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-
 	byNumber := make(map[int]filePartPlan, len(plan.parts))
 	var pending []filePartPlan
 	for _, part := range plan.parts {
@@ -367,18 +169,24 @@ func uploadParts(
 				defer func() { <-sem }()
 				etag, err := uploadOnePart(ctx, control, cfg, begin, stream, part)
 				mu.Lock()
-				defer mu.Unlock()
 				if err != nil {
 					if firstErr == nil {
 						firstErr = err
 					}
+					mu.Unlock()
 					return
 				}
 				completed[part.partNumber] = etag
 				uploaded += part.size
 				report(min64(uploaded, plan.totalSize), plan.totalSize)
+				mu.Unlock()
 			}()
-			if firstErr != nil {
+			// firstErr is written by the workers under mu; the spawn loop must
+			// read it under the same lock (previously this was a data race).
+			mu.Lock()
+			err := firstErr
+			mu.Unlock()
+			if err != nil {
 				break
 			}
 		}
@@ -406,10 +214,12 @@ func writeUploadCheckpoint(cfg *Configuration, begin *objectTransferBeginRespons
 	payload, err := json.Marshal(struct {
 		SourceRevisionID string          `json:"source_revision_id"`
 		UploadID         string          `json:"upload_id"`
+		PartSize         int64           `json:"part_size"`
 		CompletedParts   []completedPart `json:"completed_parts"`
 	}{
 		SourceRevisionID: cfg.SourceRevisionID,
 		UploadID:         begin.UploadID,
+		PartSize:         begin.PartSize,
 		CompletedParts:   parts,
 	})
 	if err != nil {
@@ -451,8 +261,11 @@ func uploadOnePart(
 	}
 	target := signed.Parts[0]
 
+	// ReadAt may legally return a short read together with io.EOF; uploading
+	// such a buffer would ship zero-filled tail bytes to the object store, so
+	// loop until the planned slice is fully read and fail on any shortfall.
 	buffer := make([]byte, part.size)
-	if _, err := stream.ReadAt(buffer, part.offset); err != nil && err != io.EOF {
+	if err := readFullAt(stream, buffer, part.offset); err != nil {
 		return "", fmt.Errorf("unable to hash multipart source: %w", err)
 	}
 
@@ -514,8 +327,11 @@ func completeUpload(ctx context.Context, control *transferControlClient, cfg *Co
 }
 
 // reconcileUploadCheckpoint re-uses parts already accepted by a previous run of
-// the same transfer, so an interrupted upload can resume.
-func reconcileUploadCheckpoint(cfg *Configuration, plan *uploadPlan) (map[int]string, error) {
+// the same transfer, so an interrupted upload can resume. The checkpoint is
+// only trusted when it matches the current session exactly: multipart ETags
+// are scoped to a specific upload_id, and part boundaries only line up when
+// part_size is unchanged. Anything else starts over.
+func reconcileUploadCheckpoint(cfg *Configuration, begin *objectTransferBeginResponse, plan *uploadPlan) (map[int]string, error) {
 	completed := map[int]string{}
 	raw, err := os.ReadFile(uploadCheckpointPath(cfg))
 	if err != nil {
@@ -526,19 +342,30 @@ func reconcileUploadCheckpoint(cfg *Configuration, plan *uploadPlan) (map[int]st
 	}
 	var checkpoint struct {
 		SourceRevisionID string          `json:"source_revision_id"`
+		UploadID         string          `json:"upload_id"`
+		PartSize         int64           `json:"part_size"`
 		Parts            []completedPart `json:"completed_parts"`
 	}
 	if err := json.Unmarshal(raw, &checkpoint); err != nil {
-		return nil, fmt.Errorf("download checkpoint invalid: %w", err)
+		return nil, fmt.Errorf("upload checkpoint invalid: %w", err)
 	}
-	if checkpoint.SourceRevisionID != cfg.SourceRevisionID {
-		// A checkpoint from a different snapshot is meaningless; start over.
+	if checkpoint.SourceRevisionID != cfg.SourceRevisionID ||
+		checkpoint.UploadID != begin.UploadID ||
+		checkpoint.PartSize != begin.PartSize {
+		// A checkpoint from a different snapshot, upload session, or part
+		// layout is meaningless; start over.
 		return completed, nil
 	}
 	for _, part := range checkpoint.Parts {
-		if part.ETag != "" {
-			completed[part.PartNumber] = part.ETag
+		if part.ETag == "" {
+			continue
 		}
+		// Ignore part numbers that no longer exist in the plan rather than
+		// carrying them into completion.
+		if part.PartNumber < 1 || part.PartNumber > len(plan.parts) {
+			continue
+		}
+		completed[part.PartNumber] = part.ETag
 	}
 	return completed, nil
 }
@@ -558,18 +385,20 @@ func min64(a, b int64) int64 {
 	return b
 }
 
-// writeTarHeader is retained for completeness: header construction is the
-// default path used by createTarBundle in the darwin build.
-func writeTarHeader(w *tar.Writer, entry snapshotEntry) error {
-	header := &tar.Header{
-		Name:     entry.relative,
-		Mode:     0o600,
-		Size:     entry.size,
-		Typeflag: tar.TypeReg,
-		Format:   tar.FormatPAX,
-	}
-	if err := w.WriteHeader(header); err != nil {
-		return err
+// readFullAt fills buf completely from r starting at off. Unlike a bare
+// ReadAt, it treats short reads (even with io.EOF) as an error: a part that is
+// not fully covered by real file bytes must never be uploaded.
+func readFullAt(r io.ReaderAt, buf []byte, off int64) error {
+	read := 0
+	for read < len(buf) {
+		n, err := r.ReadAt(buf[read:], off+int64(read))
+		read += n
+		if n == 0 && err == nil {
+			return fmt.Errorf("short read at offset %d: got %d of %d bytes: %w", off, read, len(buf), io.ErrNoProgress)
+		}
+		if err != nil {
+			return fmt.Errorf("short read at offset %d: got %d of %d bytes: %w", off, read, len(buf), err)
+		}
 	}
 	return nil
 }

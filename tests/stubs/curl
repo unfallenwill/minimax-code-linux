@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Offline test stub for curl (used by tests/run.sh).
+#
+# Behaviour is driven by the environment and the URL:
+#   MMX_TEST_SERVE_FILE set -> copies that file verbatim (e.g. a fixture zip)
+#   *fail*                  -> writes a partial body, exits 18 (fetch error)
+#   *empty*                 -> writes an EMPTY body, exits 0
+#   else                    -> writes a one-line payload body, exits 0
+# Every invocation is appended to $MMX_TEST_CURL_LOG (must be set) so tests can
+# assert that a download was (or was never) attempted.
+echo "curl $*" >>"${MMX_TEST_CURL_LOG:?MMX_TEST_CURL_LOG not set}"
+out=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "-o" ]; then out="$a"; fi
+  prev="$a"
+done
+if [ -z "$out" ]; then
+  echo "stub-curl: no -o FILE argument seen" >&2
+  exit 2
+fi
+url="${*: -1}"
+if [ -n "${MMX_TEST_SERVE_FILE:-}" ]; then
+  cat "${MMX_TEST_SERVE_FILE}" >"$out"
+  exit 0
+fi
+case "$url" in
+  *fail*)  printf 'partial-download' >"$out"; exit 18 ;;
+  *empty*) : >"$out"; exit 0 ;;
+  *)       printf 'payload-of %s\n' "$url" >"$out"; exit 0 ;;
+esac

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Offline test stub for unzip (used by tests/run.sh): fails on EXTRACT
+# operations to inject a mid-build error after the Electron archive was
+# downloaded, but delegates integrity tests (`unzip -tqq`, used by the cache
+# validator) to the real unzip at $MMX_TEST_REAL_UNZIP.
+if [ "${1:-}" = -tqq ]; then
+  exec "${MMX_TEST_REAL_UNZIP:?MMX_TEST_REAL_UNZIP not set}" "$@"
+fi
+exit 1
