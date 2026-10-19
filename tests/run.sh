@@ -474,11 +474,46 @@ case_native_compat_entry() {
     exit 0
   )
 }
+case_native_node_pty_no_spawn_helper() {
+  (
+    set -u
+    . "$ROOT/scripts/lib_common.sh"
+    . "$ROOT/scripts/lib_native_pkgs.sh"
+    . "$ROOT/scripts/lib_native_build.sh"
+    local nm="$SBOX/nm-pty"
+    rm -rf "$nm"
+    mkdir -p "$nm/node-pty/prebuilds/linux-x64"
+    # A linux prebuild with no spawn-helper alongside it. node-pty only ever
+    # exec's spawn-helper on macOS (src/unix/pty.cc guards it with
+    # #if defined(__APPLE__)), so a linux prebuild is complete without it.
+    printf 'sentinel-pty-node' > "$nm/node-pty/prebuilds/linux-x64/pty.node"
+    printf '{"name":"node-pty","version":"1.1.0"}' > "$nm/node-pty/package.json"
+
+    native_install_node_pty_linux "$nm" "x64" "42.8.0" || exit 1
+
+    # The existing prebuild must be accepted as-is: not rebuilt, not replaced.
+    [ "$(cat "$nm/node-pty/prebuilds/linux-x64/pty.node")" = "sentinel-pty-node" ] \
+      || { echo "existing pty.node was rebuilt" >&2; exit 1; }
+    # And no spawn-helper may be produced: it is not used on Linux.
+    [ ! -e "$nm/node-pty/prebuilds/linux-x64/spawn-helper" ] \
+      || { echo "spawn-helper was produced for linux" >&2; exit 1; }
+    # The build script must not compile one either. Match the source file it
+    # would have compiled, so the explanatory comment may still name it.
+    if grep -q 'spawn-helper\.cc' "$ROOT/scripts/lib_native_build.sh"; then
+      echo "lib_native_build.sh still compiles spawn-helper" >&2
+      exit 1
+    fi
+    exit 0
+  )
+}
+
 run_case "7a native modules expose the former lib_native.sh API + strip/stub" \
   case_native_modules
 [ -f "$ROOT/scripts/lib_native.sh" ] \
   && run_case "7b legacy scripts/lib_native.sh restored as compat entry" case_native_compat_entry \
   || fl "7b legacy scripts/lib_native.sh restored as compat entry"
+run_case "7c node-pty linux prebuild needs no spawn-helper" \
+  case_native_node_pty_no_spawn_helper
 
 # ============================================================================
 # Group 8: the test run did not dirty the repository

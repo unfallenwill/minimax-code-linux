@@ -52,10 +52,14 @@ native_install_better_sqlite3() {
 # node-pty@1.1.0 does not ship linux prebuilds on npm. We build them from
 # source against the Electron headers:
 #   - pty.node via node-gyp (needs Electron headers, downloads them)
-#   - spawn-helper via g++ (plain POSIX, no Electron deps)
-# binding.gyp only registers spawn-helper under OS=="mac", but the Linux fork
-# path in pty.cc execvp()s it unconditionally — so we have to compile it
-# ourselves.
+#
+# Only pty.node is needed. node-pty's spawn-helper is a macOS-only helper:
+# binding.gyp registers its target under OS=="mac", and in src/unix/pty.cc the
+# helper path is only exec'd inside the `#if defined(__APPLE__)` branch. The
+# Linux branch spawns the child with forkpty(3) and execs the target program
+# directly, so it never touches spawn-helper. Verified on node-pty 1.1.0: a
+# Linux build whose build/Release contains only pty.node spawns a shell and
+# returns its output.
 # $1 = node_modules dir, $2 = npm arch (x64), $3 = electron version
 native_install_node_pty_linux() {
   local nm="$1" arch="$2" electron_ver="$3"
@@ -66,12 +70,11 @@ native_install_node_pty_linux() {
   [ -n "$ver" ] || ver="1.1.0"
   local want="linux-${arch}"
   local pty_target="$main/prebuilds/$want/pty.node"
-  local helper_target="$main/prebuilds/$want/spawn-helper"
-  if [ -f "$pty_target" ] && [ -x "$helper_target" ]; then
-    info "node-pty $want prebuilds already present"
+  if [ -f "$pty_target" ]; then
+    info "node-pty $want prebuild already present"
     return 0
   fi
-  info "Building node-pty@$ver linux prebuilds ($want) for Electron $electron_ver ..."
+  info "Building node-pty@$ver linux prebuild ($want) for Electron $electron_ver ..."
   require_cmd g++ make python3
   local work; work="$(mktemp -d)"
   local rc=0
@@ -85,18 +88,9 @@ native_install_node_pty_linux() {
     warn "node-pty pty.node build failed (see $work/build.log); PTY support will be broken"
     rm -rf "$work"; return 0
   fi
-  # spawn-helper: tiny standalone C++ binary (no Electron deps). node-pty's
-  # binding.gyp only builds it on macOS; we compile it here for Linux.
-  g++ -O2 -o "$work/spawn-helper" "$work/node_modules/node-pty/src/unix/spawn-helper.cc" \
-    >>"$work/build.log" 2>&1 || {
-      warn "spawn-helper compile failed (see $work/build.log); pty.fork() will fail"
-      rm -rf "$work"; return 0
-    }
   mkdir -p "$main/prebuilds/$want"
   cp -f "$work/node_modules/node-pty/build/Release/pty.node" "$pty_target"
-  cp -f "$work/spawn-helper" "$helper_target"
-  chmod 0755 "$helper_target"
-  info "node-pty $want prebuilds built (pty.node + spawn-helper)"
+  info "node-pty $want prebuild built (pty.node)"
   rm -rf "$work"
   return 0
 }
