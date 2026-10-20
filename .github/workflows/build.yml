@@ -70,7 +70,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq p7zip-full perl file python3
+          sudo apt-get install -y -qq p7zip-full perl file python3 xvfb
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
@@ -93,6 +93,17 @@ jobs:
           PRODUCT_VERSION: ${{ inputs.version }}
           DMG_URL: ${{ steps.dmg.outputs.url }}
         run: ./packaging/build.sh
+
+      - name: Launch smoke test
+        # The offline suite asserts on files; nothing so far proves the built
+        # payload actually starts. A package can build cleanly and still be
+        # broken at runtime (a native addon that cannot be dlopen'd, a missing
+        # runtime resource, a native addon built against the wrong Electron
+        # ABI). Launch the staged payload headlessly and wait for the app's
+        # own startup-readiness signal.
+        run: ./tests/smoke-launch.sh build/payload
+        env:
+          MMX_SMOKE_REQUIRE: "1"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
