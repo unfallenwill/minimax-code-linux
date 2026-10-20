@@ -34,6 +34,10 @@ skip() { printf '[smoke] SKIP: %s\n' "$*"; exit 0; }
 fail() { printf '[smoke] FAIL: %s\n' "$*" >&2; exit 1; }
 
 [ -d "$PAYLOAD" ] || fail "payload dir not found: $PAYLOAD"
+# Resolve to an absolute path: the launcher is started from inside the payload
+# directory, so a relative PAYLOAD (e.g. the "build/payload" CI passes) would
+# otherwise resolve against the wrong directory.
+PAYLOAD="$(cd "$PAYLOAD" && pwd)"
 
 # The launcher to start: this repo's start.sh, or a bare Electron binary in a
 # payload laid out like the upstream app (resources/ next to the binary).
