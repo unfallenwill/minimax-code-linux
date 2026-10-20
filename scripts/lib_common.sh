@@ -5,13 +5,53 @@
 
 set -o pipefail
 
+# ---- Edition (region) ----
+# MiniMax ships TWO separate editions of the desktop app. They are different
+# applications in every way that matters to the user: different backend and
+# login hosts, different bundle id, different UI language.
+#
+#   cn        agent.minimax.cn   bundle id com.minimax.agent.cn   locale zh
+#   overseas  agent.minimax.io   bundle id com.minimax.agent      locale en
+#
+# The payload is per-edition (app.asar carries a different .env.local), so the
+# edition has to be chosen BEFORE the upstream artifact is fetched. MMX_REGION
+# selects it; every identity value below can still be overridden individually.
+: "${MMX_REGION:=cn}"
+case "$MMX_REGION" in
+  cn)
+    MMX_REGION_APP_ID=com.minimax.agent.cn
+    MMX_REGION_PKG_NAME=minimax-code
+    MMX_REGION_DISPLAY="MiniMax Code"
+    MMX_REGION_DOMAIN=https://agent.minimax.cn
+    MMX_REGION_SCHEME=minimax-cn
+    MMX_REGION_MANIFEST=https://filecdn.minimax.chat/public/minimax-agent-prod/release
+    ;;
+  overseas)
+    MMX_REGION_APP_ID=com.minimax.agent
+    MMX_REGION_PKG_NAME=minimax-code-global
+    MMX_REGION_DISPLAY="MiniMax Code (Global)"
+    MMX_REGION_DOMAIN=https://agent.minimax.io
+    MMX_REGION_SCHEME=minimax
+    MMX_REGION_MANIFEST=https://file.cdn.minimax.io/public/minimax-agent-prod/release
+    ;;
+  *)
+    printf '[error] Unknown MMX_REGION=%s (expected: cn | overseas)\n' "$MMX_REGION" >&2
+    exit 1
+    ;;
+esac
+
 # ---- Identity (overridable via env) ----
-: "${MMX_APP_ID:=com.minimax.agent.cn}"
-: "${MMX_PKG_NAME:=minimax-code}"
-: "${MMX_DISPLAY:=MiniMax Code}"
-: "${MMX_WMCLASS:=minimax-code}"
-: "${MMX_BIN:=minimax-code}"
-: "${MMX_INSTALL_PREFIX:=/opt/minimax-code}"     # in-package path used by nfpm templates
+# Each edition gets its own package name, install prefix, desktop entry and
+# icon, so the two can be installed side by side and can never fight over the
+# same dpkg/rpm file list.
+: "${MMX_APP_ID:=$MMX_REGION_APP_ID}"
+: "${MMX_PKG_NAME:=$MMX_REGION_PKG_NAME}"
+: "${MMX_DISPLAY:=$MMX_REGION_DISPLAY}"
+: "${MMX_WMCLASS:=$MMX_PKG_NAME}"
+: "${MMX_BIN:=$MMX_PKG_NAME}"
+: "${MMX_INSTALL_PREFIX:=/opt/$MMX_PKG_NAME}"    # in-package path used by nfpm templates
+: "${MMX_SCHEME:=$MMX_REGION_SCHEME}"            # deep-link scheme registered by the app
+: "${MMX_RELEASE_TAG_PREFIX:=$MMX_REGION_PKG_NAME-v}"
 : "${MMX_ELECTRON_FALLBACK:=38.3.0}"
 : "${MMX_ELECTRON_REPO:=electron/electron}"       # GitHub owner/repo for Electron releases
 : "${MMX_UPSTREAM_DMG_URL:=}"                     # set for CI auto-download; empty => require --dmg

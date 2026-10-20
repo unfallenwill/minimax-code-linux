@@ -13,6 +13,15 @@ const FILES = {
     'const electron_1 = require("electron");\nconsole.log("stub main");\n',
 };
 
+// Upstream ships a per-edition .env.local INSIDE app.asar (it selects the
+// backend host). The edition guard in install.sh reads it, so the fixture
+// serves one too: the default is the CN edition, and MMX_TEST_ENV_LOCAL
+// overrides the content so tests can simulate a payload from another edition.
+FILES[".env.local"] =
+  process.env.MMX_TEST_ENV_LOCAL !== undefined
+    ? process.env.MMX_TEST_ENV_LOCAL
+    : 'NEXT_PUBLIC_BUILD_ENV="prod"\nNEXT_PUBLIC_DOMAIN_URL="https://agent.minimax.cn"\nNEXT_PUBLIC_LOCALE="zh"\n';
+
 module.exports = {
   getRawHeader() {
     const files = {};

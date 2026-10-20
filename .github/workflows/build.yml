@@ -3,17 +3,29 @@ name: package
 # Build .deb + .rpm for MiniMax Code from the upstream macOS DMG and publish
 # them to a GitHub Release tagged minimax-code-v<version>.
 #
+# MiniMax ships TWO separate editions of the desktop app:
+#   cn        agent.minimax.cn   (com.minimax.agent.cn, Chinese UI)
+#   overseas  agent.minimax.io   (com.minimax.agent, English UI)
+# They are different payloads (app.asar ships a different .env.local), so each
+# edition is built from its own upstream DMG and published as its own package
+# and release tag:
+#   cn        minimax-code-v<version>              minimax-code_*.deb
+#   overseas  minimax-code-global-v<version>       minimax-code-global_*.deb
+# The two packages have distinct names, so they can be installed side by side.
+#
 # Triggers:
-#   - workflow_dispatch: build one explicit version. Pass `dmg_url` to point at a
-#     fetchable DMG; if omitted, packaging/resolve-version.sh resolves it (works
-#     once MiniMax publishes a latest-mac.yml at their electron-updater URL).
-#   - schedule (every 6h): discover the latest upstream version; if it is not yet
-#     released here, dispatch a build. (workflow_dispatch is the one event the
-#     GITHUB_TOKEN may trigger recursively.)
+#   - workflow_dispatch: build one explicit version. Pass a DMG URL to point at
+#     a fetchable DMG; if omitted, packaging/resolve-version.sh resolves it
+#     (works once MiniMax publishes a latest-mac.yml at their electron-updater
+#     URL). Use the region input to build a single edition.
+#   - schedule (every 6h): discover the latest upstream version; if any
+#     edition of it is not yet released, dispatch a build for it. (workflow_
+#     dispatch is the one event the GITHUB_TOKEN may trigger recursively.)
 #
 # Note: as of writing, MiniMax has not published latest-mac.yml at
-# https://filecdn.minimax.chat/public/minimax-agent/release, so scheduled
-# discovery no-ops until they do; use workflow_dispatch + dmg_url in the meantime.
+# https://filecdn.minimax.chat/public/minimax-agent-prod/release, so scheduled
+# discovery no-ops until they do; use workflow_dispatch + a DMG URL in the
+# meantime.
 
 on:
   workflow_dispatch:
@@ -22,8 +34,21 @@ on:
         description: "Upstream version, e.g. 3.0.43"
         required: true
         type: string
-      dmg_url:
-        description: "Direct DMG URL (optional; auto-resolved if omitted)"
+      region:
+        description: "Edition(s) to build"
+        required: false
+        default: both
+        type: choice
+        options:
+          - both
+          - cn
+          - overseas
+      dmg_url_cn:
+        description: "Direct DMG URL for the CN edition (optional; auto-resolved if omitted)"
+        required: false
+        type: string
+      dmg_url_overseas:
+        description: "Direct DMG URL for the global edition (optional; auto-resolved if omitted)"
         required: false
         type: string
   schedule:
@@ -44,22 +69,34 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
-          if ! out="$(./packaging/resolve-version.sh 2>/dev/null)"; then
+          if ! out="$(MMX_REGION=cn ./packaging/resolve-version.sh 2>/dev/null)"; then
             echo "No resolvable upstream version yet (latest-mac.yml not published); skipping."
             exit 0
           fi
           ver="$(printf '%s\n' "$out" | sed -n '1p')"
           [ -n "${ver:-}" ] || exit 0
           echo "Latest MiniMax Code: $ver"
-          if gh release view "minimax-code-v${ver}" -R "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "minimax-code-v${ver} already released; nothing to do."
-          else
-            gh workflow run build.yml -R "${{ github.repository }}" -f version="${ver}"
-          fi
+          for region in cn overseas; do
+            tag="$(MMX_REGION="$region" bash -c \
+              '. ./scripts/lib_common.sh >/dev/null 2>&1; printf "%s%s" "$MMX_RELEASE_TAG_PREFIX" "$1"' _ "$ver")"
+            if gh release view "$tag" -R "${{ github.repository }}" >/dev/null 2>&1; then
+              echo "$tag already released."
+            else
+              echo "Missing release: $tag"
+              gh workflow run build.yml -R "${{ github.repository }}" \
+                -f version="${ver}" -f region="${region}"
+            fi
+          done
 
   build:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && (inputs.region == 'both' || inputs.region == matrix.region)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        region: [cn, overseas]
+    env:
+      MMX_REGION: ${{ matrix.region }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -77,16 +114,21 @@ jobs:
       - name: Resolve DMG URL
         id: dmg
         env:
-          INPUT_DMG_URL: ${{ inputs.dmg_url }}
+          DMG_URL_CN: ${{ inputs.dmg_url_cn }}
+          DMG_URL_OVERSEAS: ${{ inputs.dmg_url_overseas }}
         run: |
-          if [ -n "$INPUT_DMG_URL" ]; then
-            echo "url=$INPUT_DMG_URL" >> "$GITHUB_OUTPUT"
+          set -uo pipefail
+          if [ "$MMX_REGION" = "cn" ]; then
+            url="${DMG_URL_CN:-}"
           else
+            url="${DMG_URL_OVERSEAS:-}"
+          fi
+          if [ -z "$url" ]; then
             out="$(./packaging/resolve-version.sh)"
             url="$(printf '%s\n' "$out" | sed -n '2p')"
             [ -n "$url" ] || { echo "Could not resolve DMG URL" >&2; exit 1; }
-            echo "url=$url" >> "$GITHUB_OUTPUT"
           fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Build packages
         env:
@@ -97,21 +139,30 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: packages
+          name: packages-${{ matrix.region }}
           path: dist/
           if-no-files-found: error
           retention-days: 14
 
   release:
     needs: build
+    # always(): the two editions are built and published independently, so one
+    # edition failing must not stop the other from being released.
+    if: always() && needs.build.result != 'cancelled' && needs.build.result != 'skipped' && (inputs.region == 'both' || inputs.region == matrix.region)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        region: [cn, overseas]
     env:
       VER: ${{ inputs.version }}
+      MMX_REGION: ${{ matrix.region }}
     steps:
       - uses: actions/checkout@v4
-      - name: Download all package artifacts
+      - name: Download package artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: packages-${{ matrix.region }}
           path: dist
           merge-multiple: true
       - name: Create or update release
@@ -119,17 +170,26 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="minimax-code-v${VER}"
+          . ./scripts/lib_common.sh
+          TAG="${MMX_RELEASE_TAG_PREFIX}${VER}"
+          case "$MMX_REGION" in
+            cn)
+              EDITION="MiniMax Code (CN edition, agent.minimax.cn)" ;;
+            overseas)
+              EDITION="MiniMax Code (global edition, agent.minimax.io)" ;;
+          esac
           {
             echo "MiniMax Code ${VER} — unofficial Linux packages"
+            echo
+            echo "Edition: ${EDITION}"
             echo
             echo "Repackaged from MiniMax's official macOS build. MiniMax Code is (c) MiniMax;"
             echo "this project only rewraps the upstream binaries for Linux. See NOTICE.md."
             echo
             echo "## Install"
             echo '```bash'
-            echo "sudo apt install ./minimax-code_${VER}_amd64.deb     # Debian/Ubuntu"
-            echo "sudo dnf install ./minimax-code-${VER}.x86_64.rpm    # Fedora/RHEL"
+            for f in dist/*.deb; do echo "sudo apt install ./$(basename "$f")     # Debian/Ubuntu"; done
+            for f in dist/*.rpm; do echo "sudo dnf install ./$(basename "$f")    # Fedora/RHEL"; done
             echo '```'
             echo
             echo "## Assets"

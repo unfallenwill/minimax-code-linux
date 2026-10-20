@@ -58,6 +58,23 @@ fi
 ELECTRON_VERSION="$(node -e "console.log(require('$PAYLOAD/build-info.json').electron_version)")"
 info "Packaging MiniMax Code $PRODUCT_VERSION (Electron $ELECTRON_VERSION) $MMX_DEB_ARCH/$MMX_RPM_ARCH"
 
+# ---- Stage icons under this package's own name ----------------------------
+# The canonical icon tree under packaging/icons/ is named after the CN package.
+# Each edition installs its own copy (same artwork, own file name) so two
+# editions never claim the same file and can be installed side by side.
+ICON_SRC="${MMX_ICON_SRC:-$ROOT/packaging/icons/minimax-code}"
+[ -d "$ICON_SRC" ] || die "Icon source directory not found: $ICON_SRC"
+rm -rf "$BUILD/icons"
+ICON_STAGE="$BUILD/icons/$MMX_PKG_NAME"
+mkdir -p "$ICON_STAGE"
+cp -a "$ICON_SRC/." "$ICON_STAGE/"
+ICON_BASE="$(basename "$ICON_SRC")"
+find "$ICON_STAGE" -type f -name "$ICON_BASE.png" | while IFS= read -r icon; do
+  dest="$(dirname "$icon")/$MMX_PKG_NAME.png"
+  # The CN edition already carries the package name; mv would refuse it.
+  [ "$icon" = "$dest" ] || mv -f "$icon" "$dest"
+done
+
 # ---- Render templates (perl ${VAR}) -----------------------------------------
 render() { perl -pe 's/\$\{(\w+)\}/defined $ENV{$1} ? $ENV{$1} : ""/ge' "$1" > "$2"; }
 
@@ -68,6 +85,7 @@ VERSION="$PRODUCT_VERSION" ELECTRON_VERSION="$ELECTRON_VERSION" \
 NFPM_ARCH="$MMX_DEB_ARCH" \
   render "$ROOT/packaging/templates/nfpm.yaml.tmpl" "$BUILD/nfpm.yaml"
 PKG_NAME="$MMX_PKG_NAME" DISPLAY="$MMX_DISPLAY" WMCLASS="$MMX_WMCLASS" INSTALL_PREFIX="$MMX_INSTALL_PREFIX" \
+MIME_TYPE="x-scheme-handler/${MMX_SCHEME};" \
   render "$ROOT/packaging/templates/desktop.tmpl" "$BUILD/$MMX_PKG_NAME.desktop"
 PKG_NAME="$MMX_PKG_NAME" INSTALL_PREFIX="$MMX_INSTALL_PREFIX" \
   render "$ROOT/packaging/templates/wrapper.tmpl" "$BUILD/wrapper"

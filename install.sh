@@ -120,6 +120,26 @@ asar_extract_app "$CONTENTS" "$STAGING/resources/app"
 # covered its contents, so drop the duplicate directory.
 rm -rf "$STAGING/resources/app.asar.unpacked"
 
+# The upstream ships a SEPARATE payload per edition (app.asar carries a
+# different .env.local with a different backend host). Packaging the wrong one
+# produces a package that installs cleanly and then talks to the wrong
+# backend, so verify the payload's edition against the one we asked for and
+# fail the build on a mismatch.
+info "==> Verifying payload edition (MMX_REGION=$MMX_REGION)"
+PAYLOAD_ENV="$STAGING/resources/app/.env.local"
+PAYLOAD_DOMAIN=""
+if [ -f "$PAYLOAD_ENV" ]; then
+  PAYLOAD_DOMAIN="$(sed -n 's/^NEXT_PUBLIC_DOMAIN_URL="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$PAYLOAD_ENV" | head -1)"
+fi
+if [ -z "$PAYLOAD_DOMAIN" ]; then
+  warn "could not read NEXT_PUBLIC_DOMAIN_URL from $PAYLOAD_ENV (upstream layout changed?); edition not verified"
+elif [ "$PAYLOAD_DOMAIN" != "$MMX_REGION_DOMAIN" ]; then
+  die "Edition mismatch: MMX_REGION=$MMX_REGION expects $MMX_REGION_DOMAIN, but the payload reports $PAYLOAD_DOMAIN.
+     The upstream DMG for this edition was not the one that was downloaded; refusing to package it."
+else
+  info "  payload edition OK: $PAYLOAD_DOMAIN"
+fi
+
 info "==> Applying Linux adaptation patches"
 node "$SCRIPT_DIR/scripts/patch_linux.js" "$STAGING/resources/app" "$MMX_PKG_NAME"
 
@@ -196,6 +216,8 @@ cat > "$STAGING/build-info.json" <<EOF
   "electron_version": "$ELECTRON_VERSION",
   "target_arch": "linux-$MMX_ELECTRON_ARCH",
   "app_id": "$MMX_APP_ID",
+  "region": "$MMX_REGION",
+  "domain": "${PAYLOAD_DOMAIN:-$MMX_REGION_DOMAIN}",
   "unofficial": true
 }
 EOF

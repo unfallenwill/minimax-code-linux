@@ -12,12 +12,18 @@
 # URLs with the version embedded in the filename. Anonymously fetchable, no login.
 # Strategy 2 (fallback): electron-updater latest-mac.yml at their release URL.
 set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../scripts/lib_common.sh
+. "$ROOT/scripts/lib_common.sh"
+
 CONFIG_URL="${MMX_CONFIG_URL:-https://agent.minimaxi.com/v1/api/config/web/common_config}"
 
 json="$(curl -fsSL --max-time 20 -A "Mozilla/5.0" "$CONFIG_URL" 2>/dev/null || true)"
 if [ -n "$json" ]; then
   # MMX_REGION selects which edition to package: "cn" (default, com.minimax.agent.cn,
   # filecdn.minimax.chat, minimax-cn scheme) or "overseas" (file.cdn.minimax.io).
+  # The per-edition identity used by the rest of the build lives in
+  # scripts/lib_common.sh; keep the two in sync.
   url="$(printf '%s\n' "$json" | MMX_REGION="${MMX_REGION:-cn}" python3 -c '
 import os, sys, json
 try:
@@ -42,7 +48,7 @@ for k in keys:
   fi
 fi
 
-MANIFEST="${MMX_MANIFEST_URL:-https://filecdn.minimax.chat/public/minimax-agent/release}"
+MANIFEST="${MMX_MANIFEST_URL:-$MMX_REGION_MANIFEST}"
 if mac="$(curl -fsSL --max-time 20 "$MANIFEST/latest-mac.yml" 2>/dev/null)" && [ -n "$mac" ]; then
   ver="$(printf '%s\n' "$mac" | awk '/^version:/{print $2; exit}')"
   rel="$(printf '%s\n' "$mac" | awk '/^[[:space:]]+-[[:space:]]+url:/{print $3; exit}')"

@@ -27,6 +27,9 @@
 #      compat entry scripts/lib_native.sh), and the strip/stub stage
 #      keeps its behaviour on a synthetic node_modules tree.
 #   8. The test run itself does not dirty the repository (git status snapshot).
+#   9. Edition (region) handling: each edition builds with its own app id and
+#      package identity, a payload from the other edition is refused, and an
+#      unknown region is rejected.
 set -u
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
@@ -484,6 +487,135 @@ run_case "7a native modules expose the former lib_native.sh API + strip/stub" \
 # Group 8: the test run did not dirty the repository
 # ============================================================================
 run_case "8  test run left the repository status unchanged" case_repo_untouched
+
+# ============================================================================
+# Group 9: edition (region) handling
+#
+# MiniMax ships two separate editions with different payloads. The build must
+# (a) package the edition that was asked for, (b) refuse to package a payload
+# from the other edition, and (c) record the edition in build-info.json.
+# ============================================================================
+case_edition_cn() {
+  local app="$SBOX/out/app-cn"
+  rm -rf "$app"
+  # shellcheck disable=SC2016
+  env \
+    PATH="$SBOX/stub-bin:$PATH" \
+    ROOT="$FAKEROOT" \
+    MMX_CACHE_DIR="$SBOX/cache" \
+    MMX_TEST_CURL_LOG="$SBOX/curl-pipeline.log" \
+    MMX_TEST_SERVE_FILE="$ELECTRON_ZIP" \
+    MMX_REGION=cn \
+    MMX_TEST_ENV_LOCAL='NEXT_PUBLIC_DOMAIN_URL="https://agent.minimax.cn"
+' \
+    bash "$ROOT/install.sh" --dmg "$SBOX/fake.dmg" --install-dir "$app" \
+    >"$SBOX/install-cn.log" 2>&1 || {
+      echo "install.sh (cn) exited non-zero; log:" >&2; tail -20 "$SBOX/install-cn.log" >&2; return 1; }
+  grep -q '"region": "cn"' "$app/build-info.json" \
+    || { echo "build-info.json does not record region cn" >&2; return 1; }
+  grep -q '"app_id": "com.minimax.agent.cn"' "$app/build-info.json" \
+    || { echo "build-info.json does not record the CN app id" >&2; return 1; }
+  grep -q '"minimax-code"' "$app/resources/app/package.json" \
+    || { echo "package name not rewritten to the CN package id" >&2; return 1; }
+  return 0
+}
+run_case "9a CN edition: builds, and records region/app_id/package name" case_edition_cn
+
+case_edition_overseas() {
+  local app="$SBOX/out/app-global"
+  rm -rf "$app"
+  # shellcheck disable=SC2016
+  env \
+    PATH="$SBOX/stub-bin:$PATH" \
+    ROOT="$FAKEROOT" \
+    MMX_CACHE_DIR="$SBOX/cache" \
+    MMX_TEST_CURL_LOG="$SBOX/curl-pipeline.log" \
+    MMX_TEST_SERVE_FILE="$ELECTRON_ZIP" \
+    MMX_REGION=overseas \
+    MMX_TEST_ENV_LOCAL='NEXT_PUBLIC_DOMAIN_URL="https://agent.minimax.io"
+' \
+    bash "$ROOT/install.sh" --dmg "$SBOX/fake.dmg" --install-dir "$app" \
+    >"$SBOX/install-global.log" 2>&1 || {
+      echo "install.sh (overseas) exited non-zero; log:" >&2; tail -20 "$SBOX/install-global.log" >&2; return 1; }
+  grep -q '"region": "overseas"' "$app/build-info.json" \
+    || { echo "build-info.json does not record region overseas" >&2; return 1; }
+  grep -q '"app_id": "com.minimax.agent"' "$app/build-info.json" \
+    || { echo "build-info.json does not record the global app id" >&2; return 1; }
+  grep -q '"name": "minimax-code-global"' "$app/resources/app/package.json" \
+    || { echo "package name not rewritten to the global package id" >&2; return 1; }
+  return 0
+}
+run_case "9b global edition: builds, and records region/app_id/package name" case_edition_overseas
+
+case_edition_mismatch() {
+  local app="$SBOX/out/app-mismatch"
+  rm -rf "$app"
+  # A global payload downloaded while packaging the CN edition: the build must
+  # refuse it instead of shipping a package that talks to the wrong backend.
+  # shellcheck disable=SC2016
+  if env \
+    PATH="$SBOX/stub-bin:$PATH" \
+    ROOT="$FAKEROOT" \
+    MMX_CACHE_DIR="$SBOX/cache" \
+    MMX_TEST_CURL_LOG="$SBOX/curl-pipeline.log" \
+    MMX_TEST_SERVE_FILE="$ELECTRON_ZIP" \
+    MMX_REGION=cn \
+    MMX_TEST_ENV_LOCAL='NEXT_PUBLIC_DOMAIN_URL="https://agent.minimax.io"
+' \
+    bash "$ROOT/install.sh" --dmg "$SBOX/fake.dmg" --install-dir "$app" \
+    >"$SBOX/install-mismatch.log" 2>&1; then
+    echo "install.sh accepted a payload from the other edition" >&2
+    return 1
+  fi
+  grep -q "Edition mismatch" "$SBOX/install-mismatch.log" \
+    || { echo "failure did not name the edition mismatch" >&2; tail -20 "$SBOX/install-mismatch.log" >&2; return 1; }
+  [ ! -e "$app" ] || { echo "a failed edition check still published an install dir" >&2; return 1; }
+  return 0
+}
+run_case "9c edition guard refuses a payload from the other edition" case_edition_mismatch
+
+case_region_profiles() {
+  # Each profile is checked in its own subshell: lib_common.sh applies the
+  # region defaults once per process, so a single shell cannot hold two.
+  local r
+  for r in cn overseas; do
+    (
+      set -u
+      MMX_REGION="$r"
+      . "$ROOT/scripts/lib_common.sh"
+      case "$r" in
+        cn)
+          [ "$MMX_APP_ID" = "com.minimax.agent.cn" ] || { echo "cn app id wrong: $MMX_APP_ID" >&2; exit 1; }
+          [ "$MMX_PKG_NAME" = "minimax-code" ]         || { echo "cn pkg name wrong: $MMX_PKG_NAME" >&2; exit 1; }
+          [ "$MMX_INSTALL_PREFIX" = "/opt/minimax-code" ] || { echo "cn prefix wrong" >&2; exit 1; }
+          [ "$MMX_RELEASE_TAG_PREFIX" = "minimax-code-v" ] || { echo "cn tag prefix wrong" >&2; exit 1; }
+          [ "$MMX_REGION_DOMAIN" = "https://agent.minimax.cn" ] || { echo "cn domain wrong" >&2; exit 1; }
+          ;;
+        overseas)
+          [ "$MMX_APP_ID" = "com.minimax.agent" ]      || { echo "global app id wrong: $MMX_APP_ID" >&2; exit 1; }
+          [ "$MMX_PKG_NAME" = "minimax-code-global" ]  || { echo "global pkg name wrong: $MMX_PKG_NAME" >&2; exit 1; }
+          [ "$MMX_INSTALL_PREFIX" = "/opt/minimax-code-global" ] || { echo "global prefix wrong" >&2; exit 1; }
+          [ "$MMX_RELEASE_TAG_PREFIX" = "minimax-code-global-v" ] || { echo "global tag prefix wrong" >&2; exit 1; }
+          [ "$MMX_REGION_DOMAIN" = "https://agent.minimax.io" ] || { echo "global domain wrong" >&2; exit 1; }
+          ;;
+      esac
+      exit 0
+    ) || return 1
+  done
+  return 0
+}
+run_case "9d region profiles: per-edition app id, package name, prefix, tag" case_region_profiles
+
+case_region_unknown() {
+  # lib_common.sh exits on an unknown region, so run the source in a nested
+  # subshell and check its status instead of the caller's.
+  if ( set -u; MMX_REGION=mars; . "$ROOT/scripts/lib_common.sh" ) >/dev/null 2>&1; then
+    echo "an unknown region was accepted" >&2
+    return 1
+  fi
+  return 0
+}
+run_case "9e an unknown region is rejected" case_region_unknown
 
 # ============================================================================
 # Summary

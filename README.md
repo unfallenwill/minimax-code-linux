@@ -22,18 +22,31 @@ of native addons for Linux, and wraps the result in installable packages.
 
 ## Install
 
-Download the files for your distribution and architecture from
-[Releases](../../releases) (tagged `minimax-code-v<version>`), then:
+MiniMax ships **two separate editions** of the desktop app. They are different
+applications with different backends, accounts and UI languages, and each is
+packaged here:
+
+| Edition | Backend | Release tag | Package |
+| --- | --- | --- | --- |
+| CN | `agent.minimax.cn` (Chinese UI) | `minimax-code-v<version>` | `minimax-code_*` |
+| Global | `agent.minimax.io` (English UI) | `minimax-code-global-v<version>` | `minimax-code-global_*` |
+
+Download the files for your distribution from
+[Releases](../../releases) — pick the tag that matches your edition — then:
 
 ```bash
 # Debian / Ubuntu / Mint / Pop!_OS
-sudo apt install ./minimax-code_3.0.43_amd64.deb
+sudo apt install ./minimax-code_3.0.43_amd64.deb            # CN edition
+sudo apt install ./minimax-code-global_3.0.43_amd64.deb     # global edition
 
 # Fedora / RHEL / openSUSE
-sudo dnf install ./minimax-code-3.0.43.x86_64.rpm
+sudo dnf install ./minimax-code-3.0.43.x86_64.rpm            # CN edition
+sudo dnf install ./minimax-code-global-3.0.43.x86_64.rpm     # global edition
 ```
 
-Launch from your application menu, or run `minimax-code` in a terminal. Verify
+The two packages have different names and install paths, so both can be
+installed side by side. Launch from your application menu, or run
+`minimax-code` (CN) / `minimax-code-global` (global) in a terminal. Verify
 downloads against the `checksums_*.txt` file in each release.
 
 > The first run may need to install or update the agent's CLI/runtime; follow
@@ -55,14 +68,18 @@ app's built-in macOS/Windows auto-updater.
 ## How new versions get packaged
 
 A GitHub Actions workflow (see [`.github/workflows/build.yml`](.github/workflows/build.yml))
-runs on a schedule, discovers the latest MiniMax Code version, and — if that
-version is not already released — builds packages for both architectures and
-publishes them to a GitHub Release tagged `minimax-code-v<version>`.
+runs on a schedule, discovers the latest MiniMax Code version, and — for each
+edition that is not already released — builds its packages and publishes them
+to a GitHub Release tagged `minimax-code-v<version>` (CN) and
+`minimax-code-global-v<version>` (global).
 
 The "is it released?" check uses the release tag as the source of truth: each
-successful build creates `minimax-code-v<version>`, so the set of tags is the
+successful build creates `<package>-v<version>`, so the set of tags is the
 record of what has been packaged. A build can also be triggered manually with
-`workflow_dispatch` (optionally pasting an explicit DMG URL).
+`workflow_dispatch` (choose one edition or both, and optionally paste an
+explicit DMG URL per edition).
+
+Packages are built for **x86-64** only.
 
 ## Build locally
 
@@ -77,9 +94,17 @@ Requirements: `curl`, `7z` (p7zip), `perl`, `python3`, `node`/`npm` (for
 
 # Produce .deb + .rpm from a local DMG (into dist/):
 PRODUCT_VERSION=3.0.43 DMG="MiniMax Code-3.0.43.dmg" ./packaging/build.sh
+
+# Package the global edition instead (agent.minimax.io):
+MMX_REGION=overseas PRODUCT_VERSION=3.0.43 DMG="MiniMax Code-3.0.43.dmg" \
+  ./packaging/build.sh
 ```
 
-`ARCH` is `x64`. The DMG is obtained from MiniMax's official download.
+`ARCH` is `x64`. `MMX_REGION` is `cn` (default) or `overseas` and selects both
+the upstream DMG and the package identity (app id, package name, install
+path). The build verifies that the payload it extracted really is the edition
+that was requested and refuses to package a mismatch. The DMG is obtained from
+MiniMax's official download.
 
 Both entry points are **non-destructive on failure**: arguments and the output
 directory are validated up front (dangerous targets such as `/`, system
