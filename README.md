@@ -15,8 +15,7 @@ This repository produces **unofficial Linux packages** for
 
 MiniMax Code ships only for macOS and Windows. Because it is an
 [Electron](https://www.electronjs.org/) application, the bulk of it
-(`app.asar` + the `resources/daemon/` agent backend) is cross-platform
-JavaScript. This project extracts that payload from the macOS `.dmg`, pairs it
+(`app.asar` plus its bundled runtime resources) is cross-platform JavaScript. This project extracts that payload from the macOS `.dmg`, pairs it
 with an official Linux Electron build of the same version, rebuilds the handful
 of native addons for Linux, and wraps the result in installable packages.
 
@@ -111,16 +110,15 @@ failure and old-output preservation of the real scripts. See the header of
    `Electron Framework.framework` `Info.plist` (here, 38.3.0).
 3. **Extract** `Contents/Resources/app.asar` (the GUI) and merge in
    `app.asar.unpacked/` (the native addons that cannot live inside an asar).
-   Copy `Contents/Resources/resources/daemon/` (the agent backend).
+   Mirror the rest of `Contents/Resources/` (mcode-tools, pptx-core,
+   session-transfer, and other runtime resources).
 4. **Strip macOS-only** pieces (Squirrel updater, macOS permissions addon,
    darwin screenshot addon). Native-addon handling lives in three focused
    modules: `scripts/lib_native_strip.sh` (offline strip/stub),
    `scripts/lib_native_pkgs.sh` (Linux platform packages fetched from npm),
    and `scripts/lib_native_build.sh` (addons compiled from source:
    `better-sqlite3` against the Electron headers, `node-pty`'s `pty.node` +
-   `spawn-helper`, and the Go session-transfer client). `scripts/lib_native.sh`
-   remains as a compatibility entry that simply sources all three, so callers
-   can keep using the original single-include API.
+   `spawn-helper`, and the Go session-transfer client).
 5. **Download** the official Linux Electron runtime of the detected version
    (cached and CRC-validated) and place the converted payload under
    `resources/app/`.

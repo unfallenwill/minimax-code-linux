@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Download and unpack the official Linux Electron runtime of a given version/arch
 # directly into the (staged) install root, so its resources/ sits beside the
-# MiniMax payload (resources/app, resources/resources/daemon).
+# MiniMax payload (resources/app + the copied upstream resources/resources).
 # shellcheck shell=bash
 
 # Validate a cached Electron archive: non-empty AND structurally intact

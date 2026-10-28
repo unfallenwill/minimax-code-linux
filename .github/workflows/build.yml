@@ -5,15 +5,16 @@ name: package
 #
 # Triggers:
 #   - workflow_dispatch: build one explicit version. Pass `dmg_url` to point at a
-#     fetchable DMG; if omitted, packaging/resolve-version.sh resolves it (works
-#     once MiniMax publishes a latest-mac.yml at their electron-updater URL).
+#     fetchable DMG; if omitted, packaging/resolve-version.sh resolves the asset
+#     for that exact version and HEAD-checks it.
 #   - schedule (every 6h): discover the latest upstream version; if it is not yet
 #     released here, dispatch a build. (workflow_dispatch is the one event the
 #     GITHUB_TOKEN may trigger recursively.)
 #
-# Note: as of writing, MiniMax has not published latest-mac.yml at
-# https://filecdn.minimax.chat/public/minimax-agent/release, so scheduled
-# discovery no-ops until they do; use workflow_dispatch + dmg_url in the meantime.
+# Upstream publishes electron-updater manifests at
+# https://filecdn.minimax.chat/public/minimax-agent-prod/release/latest-mac.yml
+# (same dir for the overseas CDN). That manifest is authoritative and current;
+# the web common_config lags behind it.
 
 on:
   workflow_dispatch:
@@ -43,15 +44,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -uo pipefail
-          if ! out="$(./packaging/resolve-version.sh 2>/dev/null)"; then
-            echo "No resolvable upstream version yet (latest-mac.yml not published); skipping."
-            exit 0
+          set -euo pipefail
+          if ! out="$(./packaging/resolve-version.sh)"; then
+            echo "::error::Could not resolve a fetchable upstream version/DMG; see resolve-version diagnostics above."
+            exit 1
           fi
           ver="$(printf '%s\n' "$out" | sed -n '1p')"
           [ -n "${ver:-}" ] || exit 0
           echo "Latest MiniMax Code: $ver"
-          if gh release view "minimax-code-v${ver}" -R "${{ github.repository }}" >/dev/null 2>&1; then
+          # A release only counts when it actually carries a .deb; a release
+          # whose asset upload failed must not suppress future builds.
+          assets="$(gh release view "minimax-code-v${ver}" -R "${{ github.repository }}" \
+                      --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          if printf '%s\n' "$assets" | grep -q '\.deb$'; then
             echo "minimax-code-v${ver} already released; nothing to do."
           else
             gh workflow run build.yml -R "${{ github.repository }}" -f version="${ver}"
@@ -68,23 +73,33 @@ jobs:
         with: { go-version: '1.26' }
 
       - name: Install build dependencies
+        env:
+          # 7-Zip >= 24.01 is required: upstream 3.1.6+ DMGs use XZ-compressed
+          # HFS+ and the distro p7zip build cannot decode them.
+          SEVENZIP_URL: https://www.7-zip.org/a/7z2600-linux-x64.tar.xz
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq p7zip-full perl file python3
+          sudo apt-get install -y -qq perl file python3 unzip xz-utils
+          curl -fsSL -o /tmp/7z.tar.xz "$SEVENZIP_URL"
+          sudo tar -xJf /tmp/7z.tar.xz -C /usr/local/bin 7zz
+          7zz >/dev/null
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Resolve DMG URL
         id: dmg
         env:
+          INPUT_VERSION: ${{ inputs.version }}
           INPUT_DMG_URL: ${{ inputs.dmg_url }}
         run: |
           if [ -n "$INPUT_DMG_URL" ]; then
             echo "url=$INPUT_DMG_URL" >> "$GITHUB_OUTPUT"
           else
-            out="$(./packaging/resolve-version.sh)"
+            # Pin resolution to the requested version so a release published
+            # meanwhile cannot pair this version with a newer DMG.
+            out="$(./packaging/resolve-version.sh "$INPUT_VERSION")"
             url="$(printf '%s\n' "$out" | sed -n '2p')"
-            [ -n "$url" ] || { echo "Could not resolve DMG URL" >&2; exit 1; }
+            [ -n "$url" ] || { echo "Could not resolve DMG URL for $INPUT_VERSION" >&2; exit 1; }
             echo "url=$url" >> "$GITHUB_OUTPUT"
           fi
 

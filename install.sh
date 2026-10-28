@@ -4,7 +4,7 @@
 #   ./install.sh --dmg "MiniMax Code-3.0.43.dmg" --install-dir build/minimax-code
 #
 # Pipeline: extract DMG -> stage resources/ -> extract app.asar -> process native
-# addons (GUI + daemon) -> install matching Linux Electron -> write start.sh.
+# addons (GUI) -> install matching Linux Electron -> write start.sh.
 #
 # Safety: arguments and the output directory are validated before any
 # destructive step runs, the build happens in a same-filesystem staging
@@ -64,7 +64,8 @@ if [ -n "$DMG" ] && [ ! -f "$DMG" ]; then
   die "--dmg: file not found: $DMG"
 fi
 
-require_cmd 7z curl perl node npx python3 unzip tar file strings npm
+require_cmd curl perl node npx python3 unzip tar file npm
+require_7z   # 7zz or 7z >= MMX_7Z_MIN_VERSION; XZ-compressed DMGs need 24.01+
 resolve_arch "$ARCH"
 
 WORK="$(mktemp -d)"
@@ -97,7 +98,7 @@ info "==> Staging app resources"
 info "  staging: $STAGING"
 info "  target:  $FINAL_DIR (replaced only on success)"
 # Mirror Contents/Resources so every path the app resolves via
-# process.resourcesPath (incl. the daemon at resources/resources/daemon) is intact.
+# process.resourcesPath (mcode-tools, pptx-core, bundled runtime resources) is intact.
 mkdir -p "$STAGING/resources"
 cp -a "$CONTENTS/Resources/." "$STAGING/resources/"
 rm -f "$STAGING/resources/app.asar"
@@ -145,7 +146,6 @@ else
 fi
 
 GUI_ROOT="$STAGING/resources/app"
-DAEMON_ROOT="$STAGING/resources/resources/daemon"
 
 info "==> Processing native modules (GUI)"
 native_swap_screenshots     "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH"
@@ -160,17 +160,7 @@ native_install_mariozechner_clipboard "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH"
 native_install_vscode_ripgrep         "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH"
 native_install_node_pty_linux         "$GUI_ROOT/node_modules" "$MMX_NPM_ARCH" "$ELECTRON_VERSION"
 
-if [ -d "$DAEMON_ROOT" ]; then
-  info "==> Processing native modules (daemon)"
-  native_strip_macos          "$DAEMON_ROOT/node_modules"
-  native_stub_mac_permissions "$DAEMON_ROOT/node_modules"
-fi
-
 info "==> Replacing bundled agent binaries for Linux"
-# The macOS DMG bundles only the darwin opencode (the agent runtime). Without a
-# Linux build, daemon can't spawn agents -> sending messages silently fails.
-native_install_opencode "$STAGING/resources/resources" "$MMX_NPM_ARCH"
-
 # session-transfer ships as a darwin-x64 Mach-O binary with no Linux equivalent
 # upstream; build our own so session handoff can transfer sessions on Linux.
 native_build_session_transfer_client "$STAGING/resources/resources" "$MMX_NPM_ARCH"

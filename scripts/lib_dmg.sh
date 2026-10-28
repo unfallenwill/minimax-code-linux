@@ -23,18 +23,55 @@ dmg_resolve() {
   echo "$dest"
 }
 
+# Upstream switched the DMG to XZ-compressed HFS+ (UDIF "Zero2 XZ") in 3.1.6.
+# 7-Zip gained that decoder in 24.01; older p7zip (16.02/17.05, still the
+# default on many distros and CI images) fails with "Unsupported Method" and
+# extracts no .app. Pick the newest binary available: `7zz` is the official
+# console build, `7z` may be p7zip.
+MMX_7Z_MIN_VERSION="24.01"
+MMX_7Z_BIN=""
+MMX_7Z_VERSION=""
+
+_ver_ge() { # _ver_ge <have> <need>
+  [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | tail -1)" = "$1" ]
+}
+
+seven_zip_pick() {
+  if [ -n "$MMX_7Z_BIN" ]; then return 0; fi
+  local c v best="" bestver=""
+  for c in 7z 7zz; do   # later entries win ties, so official 7zz is preferred
+    command -v "$c" >/dev/null 2>&1 || continue
+    # Version banner is the first non-empty line, but 7zz prints a leading
+    # blank line, so take the first version-like token anywhere in the output.
+    v="$("$c" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)"
+    [ -n "$v" ] || v="0.0"
+    if [ -z "$best" ] || _ver_ge "$v" "$bestver"; then
+      best="$c" bestver="$v"
+    fi
+  done
+  [ -n "$best" ] || die "No 7-Zip binary found (need 7zz or 7z >= $MMX_7Z_MIN_VERSION for XZ-compressed DMGs)"
+  MMX_7Z_BIN="$best" MMX_7Z_VERSION="$bestver"
+  if ! _ver_ge "$bestver" "$MMX_7Z_MIN_VERSION"; then
+    warn "7-Zip $bestver ($best) predates XZ-DMG support; upstream 3.1.6+ images need >= $MMX_7Z_MIN_VERSION"
+  fi
+}
+
+require_7z() { seven_zip_pick; }
+
 # Extract a DMG into $2 and echo the path to the *.app bundle inside it.
 dmg_extract() {
   local dmg="$1" dest="$2"
+  seven_zip_pick
   mkdir -p "$dest"
-  info "Extracting DMG with 7z ..."
+  info "Extracting DMG with $MMX_7Z_BIN $MMX_7Z_VERSION ..."
   local log="$dest/7z-extract.log"
   # 7z reads UDIF/HFS+ directly. It often exits non-zero on these images even
   # when extraction succeeds, so we check for the app bundle rather than the rc.
-  7z x -y -bd -o"$dest" "$dmg" >"$log" 2>&1 || warn "7z reported errors (often benign for UDIF); see $log"
+  "$MMX_7Z_BIN" x -y -bd -o"$dest" "$dmg" >"$log" 2>&1 \
+    || warn "$MMX_7Z_BIN reported errors (often benign for UDIF); see $log"
   local app
   app="$(find "$dest" -mindepth 1 -maxdepth 5 -name "*.app" -type d 2>/dev/null | head -1 || true)"
-  [ -n "$app" ] || die "No .app bundle found inside DMG extraction"
+  [ -n "$app" ] || die "No .app bundle found inside DMG extraction (7-Zip $MMX_7Z_VERSION via $MMX_7Z_BIN). Upstream DMGs need 7-Zip >= $MMX_7Z_MIN_VERSION for XZ compression; see $log"
   info "Found app bundle: $(basename "$app")"
   echo "$app"
 }

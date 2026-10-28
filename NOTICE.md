@@ -7,7 +7,7 @@ sponsored by **MiniMax** or any of its affiliates.
 ## Software attribution
 
 **MiniMax Code is © MiniMax.** All rights, title, and interest in the MiniMax
-Code software — including the bundled Electron application, the agent daemon,
+Code software — including the bundled Electron application, the agent runtime,
 the Mavis browser extension, and all associated assets — remain the property of
 MiniMax.
 
@@ -17,7 +17,7 @@ pipeline in this repository:
 1. Takes an **official, unmodified** MiniMax Code macOS `.dmg` that a user
    obtains themselves.
 2. Extracts the cross-platform JavaScript payload (the `app.asar` bundle and
-   the `resources/daemon/` agent backend) — these are architecture-independent.
+   its bundled runtime resources) — these are architecture-independent.
 3. Pairs that payload with an official, unmodified **Linux Electron** runtime of
    the matching version, so the same JavaScript can run on Linux.
 4. Rebuilds a small number of native Node addons for the Linux platform.

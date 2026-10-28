@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Native-addons stage 1 (offline): strip macOS/Windows-only packages from a
 # node_modules tree and stub the one macOS-only module that has no Linux
-# equivalent. Pure filesystem work — no network, no npm. Applied to both the
-# GUI node_modules and the daemon node_modules (strip + stub only).
+# equivalent. Pure filesystem work — no network, no npm. Applied to the GUI
+# node_modules tree.
 #
 # Companion modules:
 #   scripts/lib_native_pkgs.sh   platform packages fetched from npm

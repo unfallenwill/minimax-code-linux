@@ -23,9 +23,8 @@
 #   6. Electron cache validation: a corrupt cached archive is detected and re-
 #      downloaded; a valid one is reused without any network call.
 #   7. The split native modules (lib_native_strip.sh / _pkgs.sh / _build.sh)
-#      expose exactly the former lib_native.sh API (also via the restored
-#      compat entry scripts/lib_native.sh), and the strip/stub stage
-#      keeps its behaviour on a synthetic node_modules tree.
+#      expose the API install.sh expects, and the strip/stub stage keeps its
+#      behaviour on a synthetic node_modules tree.
 #   8. The test run itself does not dirty the repository (git status snapshot).
 set -u
 cd "$(dirname "$0")/.."
@@ -73,6 +72,7 @@ REAL_UNZIP="$(command -v unzip)"
 mkdir -p "$SBOX/stub-bin" "$SBOX/stub-unzip" "$SBOX/stub-mv" "$SBOX/out"
 cp "$ROOT/tests/stubs/curl" "$SBOX/stub-bin/curl"
 cp "$ROOT/tests/stubs/7z" "$SBOX/stub-bin/7z"
+cp "$ROOT/tests/stubs/7z" "$SBOX/stub-bin/7zz"   # seven_zip_pick prefers 7zz
 cp "$ROOT/tests/stubs/unzip-fail" "$SBOX/stub-unzip/unzip"
 cp "$ROOT/tests/stubs/mv-block-first" "$SBOX/stub-mv/mv"
 chmod +x "$SBOX/stub-bin/"* "$SBOX/stub-unzip/unzip" "$SBOX/stub-mv/mv"
@@ -424,7 +424,7 @@ case_native_modules() {
     for fn in native_strip_macos native_stub_mac_permissions \
               native_swap_screenshots native_install_mariozechner_clipboard \
               native_install_vscode_ripgrep native_install_cua_driver \
-              native_install_opencode native_install_better_sqlite3 \
+              native_install_better_sqlite3 \
               native_install_node_pty_linux native_build_session_transfer_client; do
       [ "$(type -t "$fn")" = function ] || { echo "missing function: $fn" >&2; exit 1; }
     done
@@ -461,24 +461,8 @@ case_native_modules() {
     exit 0
   )
 }
-case_native_compat_entry() {
-  (
-    set -u
-    . "$ROOT/scripts/lib_common.sh"
-    . "$ROOT/scripts/lib_native.sh"   # legacy entry must keep working
-    local fn
-    for fn in native_strip_macos native_stub_mac_permissions \
-              native_install_opencode native_install_node_pty_linux; do
-      [ "$(type -t "$fn")" = function ] || { echo "legacy lib_native.sh missing: $fn" >&2; exit 1; }
-    done
-    exit 0
-  )
-}
-run_case "7a native modules expose the former lib_native.sh API + strip/stub" \
+run_case "7 native modules expose the expected API + strip/stub" \
   case_native_modules
-[ -f "$ROOT/scripts/lib_native.sh" ] \
-  && run_case "7b legacy scripts/lib_native.sh restored as compat entry" case_native_compat_entry \
-  || fl "7b legacy scripts/lib_native.sh restored as compat entry"
 
 # ============================================================================
 # Group 8: the test run did not dirty the repository

@@ -11,6 +11,12 @@ out=""
 for a in "$@"; do
   case "$a" in -o*) out="${a#-o}" ;; esac
 done
+# No -oDIR: emulate the version banner probe done by seven_zip_pick().
+if [ -z "$out" ] && [ "$#" -eq 0 ]; then
+  echo ""
+  echo "7-Zip (z) 99.00 (x64) : test stub"
+  exit 0
+fi
 if [ -z "$out" ]; then
   echo "stub-7z: no -oDIR argument seen" >&2
   exit 2
