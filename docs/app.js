@@ -4,19 +4,18 @@
   "use strict";
 
   var REPO = "unfallenwill/minimax-code-linux";
-  var API  = "https://api.github.com/repos/" + REPO + "/releases/latest";
+  var API = "https://api.github.com/repos/" + REPO + "/releases/latest";
   var FALLBACK = "https://github.com/" + REPO + "/releases/latest";
 
   var state = { version: null, assets: [], date: null, distro: "deb" };
 
   function $(id) { return document.getElementById(id); }
+  function setText(id, value) { var el = $(id); if (el) el.textContent = value; }
 
   function pickAsset(assets, distro) {
     // assets look like: minimax-code_3.0.43_amd64.deb / minimax-code-3.0.43.x86_64.rpm
     var ext = distro === "deb" ? ".deb" : ".rpm";
-    var hints = distro === "deb"
-      ? ["amd64", "x86_64", "x64"]
-      : ["x86_64", "amd64", "x64"];
+    var hints = ["x86_64", "amd64", "x64"];
     for (var i = 0; i < assets.length; i++) {
       var n = assets[i].name.toLowerCase();
       if (n.indexOf(ext) === -1) continue;
@@ -43,14 +42,20 @@
     return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   }
 
+  function fmtSize(bytes) {
+    if (!bytes || bytes < 0) return "";
+    var mb = bytes / 1048576;
+    return (mb >= 100 ? Math.round(mb) : Math.round(mb * 10) / 10) + " MB";
+  }
+
   function renderVersion() {
     if (state.version) {
-      $("version-value").textContent = state.version;
-      $("version-badge").textContent = "v" + state.version;
-      $("version-date").textContent = state.date ? "· " + fmtDate(state.date) : "";
+      setText("version-value", state.version);
+      setText("version-date", state.date ? "· " + fmtDate(state.date) : "");
+      document.title = "MiniMax Code " + state.version + " · Linux 下载";
     } else {
-      $("version-value").textContent = "见 Releases";
-      $("version-badge").textContent = "v—";
+      setText("version-value", "见 Releases");
+      setText("version-date", "");
     }
   }
 
@@ -64,26 +69,22 @@
 
     if (asset) {
       main.href = asset.browser_download_url;
-      main.classList.remove("disabled");
       label.textContent = state.distro === "deb" ? "下载 .deb" : "下载 .rpm";
-      sub.textContent = asset.name;
+      var size = fmtSize(asset.size);
+      sub.textContent = asset.name + (size ? " · " + size : "");
     } else {
       main.href = FALLBACK;
       label.textContent = "前往 Releases";
-      sub.textContent = "未找到匹配的安装包，请查看全部版本";
+      sub.textContent = "暂未获取到安装包，请查看全部版本";
     }
 
-    if (checksums) {
-      $("download-checksums").href = checksums.browser_download_url;
-    } else {
-      $("download-checksums").href = FALLBACK;
-    }
+    $("download-checksums").href = checksums ? checksums.browser_download_url : FALLBACK;
 
-    var filename = asset ? "./" + asset.name : "minimax-code-package";
-    if (state.distro === "deb") {
-      cmd.textContent = "sudo apt install " + filename;
+    if (asset) {
+      var filename = "./" + asset.name;
+      cmd.textContent = (state.distro === "deb" ? "sudo apt install " : "sudo dnf install ") + filename;
     } else {
-      cmd.textContent = "sudo dnf install " + filename;
+      cmd.textContent = "# 暂时无法获取版本信息，请从 Releases 页面下载对应的安装包";
     }
   }
 
@@ -134,7 +135,14 @@
     renderVersion();
     renderDownload();
 
-    fetch(API, { headers: { "Accept": "application/vnd.github+json" } })
+    // GitHub can be slow or rate-limited; never leave the page on "加载中…".
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, 8000) : 0;
+
+    fetch(API, {
+      headers: { "Accept": "application/vnd.github+json" },
+      signal: controller ? controller.signal : undefined,
+    })
       .then(function (r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
@@ -155,7 +163,8 @@
         state.assets = [];
         renderVersion();
         renderDownload();
-      });
+      })
+      .then(function () { if (timer) clearTimeout(timer); });
   }
 
   if (document.readyState === "loading") {

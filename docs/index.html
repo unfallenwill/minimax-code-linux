@@ -4,85 +4,84 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MiniMax Code Linux 版 · 下载与安装</title>
-  <meta name="description" content="下载 MiniMax Code 最新的非官方 Linux 版安装包（.deb / .rpm），跟随上游版本自动构建。" />
+  <meta name="description" content="下载 MiniMax Code 最新的非官方 Linux 安装包（.deb / .rpm），从官方 macOS 版转换，跟随上游版本自动构建。" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="MiniMax Code · Linux 版下载" />
+  <meta property="og:description" content="非官方 .deb / .rpm 安装包，从官方 macOS 版转换，跟随上游自动构建。" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="icon" type="image/png" href="icon.png" />
+  <link rel="apple-touch-icon" href="icon.png" />
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" type="image/png" href="../assets/minimax-code.png" />
 </head>
 <body>
-  <main class="container">
-
-    <header class="hero">
-      <p class="hero-eyebrow">非官方 Linux 构建版</p>
-      <h1>MiniMax Code<br/>为 Linux 而来</h1>
-      <p class="tagline">
-        从官方 macOS 版转换的 <code>.deb</code> / <code>.rpm</code> 安装包，
-        跟随上游自动构建。选发行版，一行命令装好。
-      </p>
-      <div class="hero-badges">
-        <a class="hero-badge" href="https://github.com/unfallenwill/minimax-code-linux" target="_blank" rel="noopener">GitHub</a>
-        <a class="hero-badge" href="https://github.com/unfallenwill/minimax-code-linux/releases" target="_blank" rel="noopener">Releases</a>
-        <span class="hero-badge version" id="version-badge" title="最新已打包版本">v—</span>
-      </div>
+  <div class="page">
+    <header class="topbar">
+      <a class="brand" href="https://github.com/unfallenwill/minimax-code-linux" target="_blank" rel="noopener">
+        <img src="icon.png" alt="" width="26" height="26" />
+        <span class="brand-text">MiniMax Code <em>Linux</em></span>
+      </a>
+      <nav class="topnav" aria-label="导航">
+        <a href="https://github.com/unfallenwill/minimax-code-linux" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/unfallenwill/minimax-code-linux/releases" target="_blank" rel="noopener">Releases</a>
+      </nav>
     </header>
 
-    <section class="download-area" aria-label="下载">
-      <div class="version-line">
-        <span class="version-label">最新版本</span>
-        <span class="version-value" id="version-value">加载中…</span>
-        <span class="version-date" id="version-date"></span>
-      </div>
-
-      <div class="distro-toggle" role="tablist" aria-label="发行版">
-        <button class="tab active" data-distro="deb" role="tab" aria-selected="true">Debian / Ubuntu</button>
-        <button class="tab"        data-distro="rpm" role="tab" aria-selected="false">Fedora / RHEL</button>
-      </div>
-
-      <div class="download-buttons">
-        <a class="btn btn-primary" id="download-main" href="#" download>
-          <span class="btn-label" id="download-label">下载</span>
-          <span class="btn-sub"   id="download-sub"></span>
-        </a>
-        <a class="btn btn-secondary" id="download-checksums" href="#" target="_blank" rel="noopener">校验文件</a>
-        <a class="btn btn-secondary" id="download-all" href="https://github.com/unfallenwill/minimax-code-linux/releases/latest" target="_blank" rel="noopener">全部文件</a>
-      </div>
-
-      <div class="command-block">
-        <div class="command-header">
-          <span class="command-title">或在终端中安装</span>
-          <button class="copy-btn" id="copy-cmd" type="button" aria-label="复制命令">复制</button>
+    <main>
+      <section class="hero">
+        <div class="hero-mark reveal" style="--d:0ms">
+          <img src="icon.png" alt="MiniMax Code" width="64" height="64" />
         </div>
-        <pre><code id="install-cmd"></code></pre>
-      </div>
-
-      <p class="arch-help">
-        适用于 x86_64 架构。不确定？运行 <code>uname -m</code>，应显示 <code>x86_64</code>。
-      </p>
-    </section>
-
-    <section class="section" aria-label="快速上手">
-      <h2 class="section-title">三步开始</h2>
-      <div class="steps-grid">
-        <div class="step">
-          <div class="step-num">1</div>
-          <h3>下载</h3>
-          <p>选择你的发行版，点击上方按钮下载对应的安装包。</p>
+        <p class="eyebrow reveal" style="--d:60ms">
+          <span class="pulse"></span>非官方 Linux 构建 · 跟随上游自动发布
+        </p>
+        <h1 class="reveal" style="--d:120ms">
+          MiniMax Code<br /><span class="accent">为 Linux 而来</span>
+        </h1>
+        <p class="lede reveal" style="--d:180ms">
+          从官方 macOS 版重新打包的 <code>.deb</code> / <code>.rpm</code>，
+          保留原版功能，随上游版本自动构建。
+        </p>
+        <div class="version-pill reveal" style="--d:240ms" aria-live="polite">
+          <span class="version-label">最新版本</span>
+          <strong class="version-value" id="version-value">加载中…</strong>
+          <span class="version-date" id="version-date"></span>
         </div>
-        <div class="step">
-          <div class="step-num">2</div>
-          <h3>安装</h3>
-          <p>用 <code>apt</code> 或 <code>dnf</code> 一行命令安装，命令会自动复制到剪贴板。</p>
-        </div>
-        <div class="step">
-          <div class="step-num">3</div>
-          <h3>启动</h3>
-          <p>从应用菜单启动，或在终端运行 <code>minimax-code</code>。</p>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="section help" id="help" aria-label="常见问题">
-      <h2 class="section-title">常见问题</h2>
-      <div class="help-list">
+      <section class="install-card reveal" style="--d:300ms" aria-label="下载与安装">
+        <div class="card-top">
+          <div class="distro-toggle" role="tablist" aria-label="选择发行版">
+            <button class="tab active" data-distro="deb" role="tab" aria-selected="true">Debian / Ubuntu</button>
+            <button class="tab" data-distro="rpm" role="tab" aria-selected="false">Fedora / RHEL</button>
+          </div>
+          <span class="arch-chip" title="仅支持 x86_64">x86_64</span>
+        </div>
+
+        <div class="actions">
+          <a class="btn btn-primary" id="download-main" href="#" download>
+            <span class="btn-label" id="download-label">下载</span>
+            <span class="btn-sub" id="download-sub"></span>
+          </a>
+          <a class="btn btn-ghost" id="download-checksums" href="#" target="_blank" rel="noopener">SHA256</a>
+          <a class="btn btn-ghost" id="download-all" href="https://github.com/unfallenwill/minimax-code-linux/releases/latest" target="_blank" rel="noopener">全部文件</a>
+        </div>
+
+        <div class="command-block">
+          <div class="command-header">
+            <span class="command-title"><i></i><i></i><i></i>在终端中安装</span>
+            <button class="copy-btn" id="copy-cmd" type="button" aria-label="复制安装命令">复制</button>
+          </div>
+          <pre><code id="install-cmd"></code></pre>
+        </div>
+
+        <p class="hint">
+          三步：下载 → 安装 → 启动 <code>minimax-code</code>。不确定架构？<code>uname -m</code> 应显示 <code>x86_64</code>。
+        </p>
+      </section>
+
+      <section class="faq" aria-label="常见问题">
+        <h2 class="faq-title">常见问题</h2>
         <details>
           <summary>应用无法启动，或提示 chrome-sandbox 错误</summary>
           <p>
@@ -96,34 +95,26 @@
           <p>请安装 GNOME Shell 扩展 <code>AppIndicator and KStatusNotifierItem Support</code>。</p>
         </details>
         <details>
-          <summary>Wayland 下任务栏图标显示为默认图标</summary>
-          <p>已通过 <code>package.json#name</code> 修复。如果仍出现，请升级到最新版本。</p>
-        </details>
-        <details>
-          <summary>如何升级？</summary>
-          <p>直接安装新版本安装包即可，包管理器会自动替换旧版本，无需先卸载。</p>
-        </details>
-        <details>
-          <summary>如何卸载？</summary>
+          <summary>如何升级或卸载？</summary>
+          <p>直接安装新版本即可，包管理器会自动替换旧版本。卸载：</p>
           <pre><code>sudo apt remove minimax-code   # Debian/Ubuntu
 sudo dnf remove minimax-code   # Fedora/RHEL</code></pre>
         </details>
-      </div>
-    </section>
+      </section>
+    </main>
 
     <footer class="footer">
       <p>
-        非官方项目，与 MiniMax 公司无关，也未获得其认可或赞助。<br/>
+        非官方项目，与 MiniMax 公司无关，也未获得其认可或赞助。
         MiniMax Code 版权归 MiniMax 所有，本仓库的打包脚本以 MIT 协议开源。
       </p>
-      <div class="footer-links">
+      <nav class="footer-links" aria-label="页脚">
         <a href="https://github.com/unfallenwill/minimax-code-linux" target="_blank" rel="noopener">源代码</a>
         <a href="https://github.com/unfallenwill/minimax-code-linux/issues" target="_blank" rel="noopener">问题反馈</a>
         <a href="https://github.com/unfallenwill/minimax-code-linux/releases" target="_blank" rel="noopener">全部版本</a>
-      </div>
+      </nav>
     </footer>
-
-  </main>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>
